@@ -147,6 +147,17 @@
 .glass-range::-webkit-slider-thumb:active {
   transform: scale(1.15);
 }
+.glass-range::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Keyboard focus indicator (native ring is removed by appearance:none) */
+.glass-range:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.85);
+  outline-offset: 3px;
+}
 .glass-range::-moz-range-thumb {
   width: 16px;
   height: 16px;
@@ -155,6 +166,9 @@
   border: 0.5px solid rgba(0, 0, 0, 0.1);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
   cursor: pointer;
+}
+.glass-range:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
 }
 
 /* Slim scrollbar for preset galleries */

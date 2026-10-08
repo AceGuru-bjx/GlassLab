@@ -322,15 +322,15 @@ export function GlassLab() {
             </div>
           </div>
           <span className="hidden rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-medium text-emerald-600 sm:inline-block dark:text-emerald-400">
-            Phase 1 · 检查 1/5 进行中
+            Phase 1 · 检查 2/5 进行中
           </span>
         </div>
       </header>
 
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-5">
-        <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)_320px]">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[260px_minmax(0,1fr)_320px]">
           {/* ---------- Left: style presets ---------- */}
-          <aside className="order-2 lg:order-1">
+          <aside className="order-2 min-w-0 lg:order-1">
             <CardShell icon={<Palette className="h-3.5 w-3.5" />} title="玻璃样式库" hint="12 款">
               <div className="grid max-h-[520px] grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3 lg:grid-cols-2 glass-scroll">
                 {PRESETS.map(p => (
@@ -359,7 +359,7 @@ export function GlassLab() {
           </aside>
 
           {/* ---------- Center: stage ---------- */}
-          <section className="order-1 lg:order-2">
+          <section className="order-1 min-w-0 lg:order-2">
             <CardShell
               icon={<MousePointer2 className="h-3.5 w-3.5" />}
               title="实验舞台"
@@ -437,7 +437,7 @@ export function GlassLab() {
           </section>
 
           {/* ---------- Right: controls + saved ---------- */}
-          <aside className="order-3">
+          <aside className="order-3 min-w-0">
             <CardShell icon={<Settings2 className="h-3.5 w-3.5" />} title="参数控制台">
               <Tabs defaultValue="params">
                 <TabsList className="mb-4 grid w-full grid-cols-2">
@@ -571,7 +571,7 @@ export function GlassLab() {
             </a>{' '}
             (Apache-2.0)
           </span>
-          <span>第一阶段全面深度检查 · 1/5 基础架构与配置层</span>
+          <span>第一阶段全面深度检查 · 2/5 全局样式与布局层</span>
         </div>
       </footer>
     </div>

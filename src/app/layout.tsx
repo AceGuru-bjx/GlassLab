@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   keywords: ["液态玻璃", "Liquid Glass", "玻璃实验室", "Kyant0", "Next.js", "React", "SVG 滤镜", "displacement map"],
   authors: [{ name: "GlassLab" }],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: [{ url: "/logo.svg", type: "image/svg+xml" }],
   },
   openGraph: {
     title: "玻璃实验室 GlassLab",
@@ -35,7 +35,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="zh-CN" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
