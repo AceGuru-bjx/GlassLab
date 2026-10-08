@@ -105,12 +105,11 @@ jobs:
       - name: Start & probe
         working-directory: standalone
         env:
-          # Absolute: relative sqlite URLs are resolved against the schema
-          # directory baked in at generate time — not the process CWD.
-          DATABASE_URL: file:${{ github.workspace }}/db/custom.db
           PORT: "3100"
           HOSTNAME: 127.0.0.1
         run: |
+          # CWD is the unpacked bundle root — same shape as a real deployment.
+          export DATABASE_URL="file:$(pwd)/db/custom.db"
           node server.js > server.log 2>&1 &
           echo $! > server.pid
 
