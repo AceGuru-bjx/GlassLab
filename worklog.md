@@ -70,3 +70,26 @@ Stage Summary:
 - 观察项移交：use-mobile/sidebar 等模板死代码保留（零运行时成本，已记录）；位移贴图重绘无时间节流（性能观察，非缺陷）
 - GitHub 产物：repo 7 commits（CI 全绿）、issues #18–#23 关闭、Project 条目 #3 Done
 - 下一步：检查 4/5（issue #4，API 与数据层）
+
+---
+Task ID: 4
+Agent: Z.ai Code (main agent)
+Task: 检查 4/5（交互功能与数据层，issue #4）：深度检查 → 提 Issue → 修复 → CI 推送 → 闭环
+
+Work Log:
+- 圈定范围：api/presets ×2 + api 根端点 + prisma schema + lib/db + lib/glass/presets + glass-lab（保存/删除/载入/拖拽/滑杆）+ glass-demo-card（时钟水合）
+- zod v4 实证排错：NaN/Infinity/-Infinity 均被 invalid_type 拒绝（4 例），数值边界无洞；未知字段被剥离
+- curl 实测确认 3 个中级缺陷：非法 JSON → 500（违反验收「非法请求体 400」）；tint/glow 任意字符串、CSS 注入载荷 201 落库；直写 SQLite 坏行 → GET 列表+单条全 500（前端永久无法加载/清理，功能级 DoS）
+- 代码审查确认低级缺陷：删除竞态 P2025 → 500（非幂等）+ UI 删除无 pending；Prisma 无条件 query 日志；/api Hello World 死端点；预设名无 maxLength + 失败 toast 误归因网络
+- 提 Issue #24–#30（全部附实测证据）→ 修复：JSON 解析护栏 400 + 10KB/413 上限、zod 颜色 refine（hex/rgb(a)/hsl(a)/transparent，12 款预设全兼容）、GET 列表逐条容错跳过坏行 + 单条 200+corrupt 标记、DELETE catch P2025 → 404、deletingId pending 态、db 日志仅 dev、删 /api 死端点、maxLength=48 + 400 归因修正、Header/Footer 文案 4/5
+- 验证：lint+tsc 绿；curl 9 例边界套件全过（400/413/201/404/降级/无泄漏）；并发双删 200+404、三连发无 500；浏览器黄金路径 调参→保存→载入→删除 全通、控制台 0 error；390px 无溢出、1440px 三栏正常
+- 提交 1059e28 → CI run 37738438947 success → #24–#30 自动关闭 → 报告回帖 #4 并关闭 → Project 条目 Done（mutation 响应已验证）
+
+Stage Summary:
+- 检查 4/5 完成闭环：7 个缺陷（3 中 4 低）全部 Issue→Fix→CI→关闭
+- 关键决策：读路径必须对坏数据优雅降级（单条毒数据不得炸整端点）；客户端载荷错误归 4xx、10KB 上限护栏；颜色类字段一律白名单格式校验（值会被插值进 CSS）
+- 沉淀：zod v4 已原生拒 NaN/Infinity，勿再补 .finite() 误报；App Router route handler 无默认 body 限制需自设上限
+- 排除疑点：时钟水合安全、SQL 注入（全参数化）、拖拽约束/滑杆联动语义均实测无恙
+- 观察项移交：take:100 静默截断、坏行无 UI 删除入口（当前无此类数据）
+- GitHub 产物：repo 9 commits（CI 全绿）、issues #24–#30 关闭、Project 条目 #4 Done
+- 下一步：检查 5/5（issue #5，构建部署与资源层）——最后一批
