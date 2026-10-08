@@ -1,10 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { motion } from 'framer-motion'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Camera,
-  Cloud,
+  Flashlight,
   Droplets,
   Music,
   Play,
@@ -103,7 +101,7 @@ export function GlassDemoCard({ config, dark }: DemoCardProps) {
               { key: 'wifi', icon: Wifi, label: 'Wi-Fi' },
               { key: 'bt', icon: Bluetooth, label: '蓝牙' },
               { key: 'air', icon: Airplay, label: '投送' },
-              { key: 'torch', icon: Camera, label: '手电' },
+              { key: 'torch', icon: Flashlight, label: '手电' },
             ] as const
           ).map(({ key, icon: Icon, label }) => {
             const on = toggles[key]
@@ -149,22 +147,22 @@ export function GlassDemoCard({ config, dark }: DemoCardProps) {
             <div className="truncate text-xs font-medium">Liquid Glass Dreams</div>
             <div className={`truncate text-[10px] ${subText}`}>Kyant0 · Refraction EP</div>
           </div>
-          <SkipBack className="h-4 w-4 opacity-70" />
+          <SkipBack className="h-4 w-4 opacity-70" aria-hidden />
           <button
             onClick={() => setPlaying(p => !p)}
             aria-label={playing ? '暂停' : '播放'}
             className="flex h-8 w-8 items-center justify-center rounded-full bg-white/25 transition-transform active:scale-90"
           >
             {playing ? (
-              <span className="flex gap-[3px]">
+              <span className="flex gap-[3px]" aria-hidden>
                 <span className="h-3 w-[3px] rounded-sm bg-current" />
                 <span className="h-3 w-[3px] rounded-sm bg-current" />
               </span>
             ) : (
-              <Play className="h-4 w-4 pl-[1px]" />
+              <Play className="h-4 w-4 pl-[1px]" aria-hidden />
             )}
           </button>
-          <SkipForward className="h-4 w-4 opacity-70" />
+          <SkipForward className="h-4 w-4 opacity-70" aria-hidden />
         </div>
 
         {/* Status row */}
@@ -182,10 +180,23 @@ export function GlassDemoCard({ config, dark }: DemoCardProps) {
 }
 
 /** Small pill widget floating on the stage. */
-export function GlassPill({ config, label }: { config: GlassConfig; label: string }) {
+export function GlassPill({
+  config,
+  label,
+  dark,
+}: {
+  config: GlassConfig
+  label: string
+  /** use light text on dark-ish stage backgrounds */
+  dark?: boolean
+}) {
   return (
     <LiquidGlass config={config} className="select-none">
-      <div className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-foreground">
+      <div
+        className={`flex items-center gap-2 px-4 py-2 text-xs font-medium ${
+          dark ? 'text-white' : 'text-foreground'
+        }`}
+      >
         <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
         {label}
       </div>

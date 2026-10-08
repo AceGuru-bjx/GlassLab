@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Backpack,
-  Copy,
+  Import,
   Loader2,
   MousePointer2,
   Palette,
@@ -33,6 +33,8 @@ import {
 interface BackgroundOption {
   id: string
   name: string
+  /** dark-ish backdrop → light text for overlays that lack their own control */
+  dark?: boolean
   /** css background for the stage */
   css?: string
   /** image url for the stage */
@@ -59,30 +61,35 @@ const BACKGROUNDS: BackgroundOption[] = [
   {
     id: 'aurora',
     name: '极光',
+    dark: true,
     url: '/backgrounds/aurora.png',
     thumb: 'linear-gradient(135deg,#134e4a,#10b981,#7c3aed)',
   },
   {
     id: 'fluid',
     name: '流彩',
+    dark: true,
     url: '/backgrounds/fluid.png',
     thumb: 'linear-gradient(135deg,#fb923c,#ec4899,#14b8a6)',
   },
   {
     id: 'sunset',
     name: '落日',
+    dark: true,
     url: '/backgrounds/sunset.png',
     thumb: 'linear-gradient(135deg,#f59e0b,#f43f5e,#38bdf8)',
   },
   {
     id: 'neoncity',
     name: '霓虹',
+    dark: true,
     url: '/backgrounds/neoncity.png',
     thumb: 'linear-gradient(135deg,#312e81,#db2777,#06b6d4)',
   },
   {
     id: 'dark',
     name: '暗夜',
+    dark: true,
     css: 'radial-gradient(at 30% 20%, #1e3a5f 0px, transparent 60%), radial-gradient(at 75% 70%, #3b0764 0px, transparent 55%), linear-gradient(160deg, #020617, #0f172a)',
     thumb: 'linear-gradient(135deg,#0f172a,#1e3a5f,#3b0764)',
   },
@@ -321,8 +328,8 @@ export function GlassLab() {
               </p>
             </div>
           </div>
-          <span className="hidden rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-medium text-emerald-600 sm:inline-block dark:text-emerald-400">
-            Phase 1 · 检查 2/5 进行中
+          <span className="hidden rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-medium text-emerald-600 sm:inline-block">
+            Phase 1 · 检查 3/5 进行中
           </span>
         </div>
       </header>
@@ -396,18 +403,20 @@ export function GlassLab() {
                       }
                 }
               >
-                {/* draggable demo card */}
-                <motion.div
-                  drag
-                  dragConstraints={stageRef}
-                  dragElastic={config.elasticity}
-                  dragMomentum={false}
-                  whileDrag={{ scale: 1.03 }}
-                  className="absolute left-1/2 top-1/2 z-10 -ml-[160px] -mt-[180px] cursor-grab active:cursor-grabbing"
-                  data-testid="draggable-card"
-                >
-                  <GlassDemoCard config={config} dark={darkContent || config.overLight} />
-                </motion.div>
+                {/* draggable demo card — flex 居中，不依赖卡高硬编码 */}
+                <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+                  <motion.div
+                    drag
+                    dragConstraints={stageRef}
+                    dragElastic={config.elasticity}
+                    dragMomentum={false}
+                    whileDrag={{ scale: 1.03 }}
+                    className="pointer-events-auto cursor-grab active:cursor-grabbing"
+                    data-testid="draggable-card"
+                  >
+                    <GlassDemoCard config={config} dark={darkContent || config.overLight} />
+                  </motion.div>
+                </div>
 
                 {/* floating pills */}
                 <motion.div
@@ -416,7 +425,7 @@ export function GlassLab() {
                   dragElastic={config.elasticity}
                   className="absolute left-6 top-6 z-10 cursor-grab active:cursor-grabbing"
                 >
-                  <GlassPill config={config} label="液态玻璃 · live" />
+                  <GlassPill config={config} label="液态玻璃 · live" dark={bg.dark} />
                 </motion.div>
                 <motion.div
                   drag
@@ -424,7 +433,7 @@ export function GlassLab() {
                   dragElastic={config.elasticity}
                   className="absolute bottom-6 right-6 z-10 cursor-grab active:cursor-grabbing"
                 >
-                  <GlassPill config={config} label="拖我试试 ↕" />
+                  <GlassPill config={config} label="拖我试试 ↕" dark={bg.dark} />
                 </motion.div>
 
                 {/* corner hint */}
@@ -500,11 +509,12 @@ export function GlassLab() {
                         >
                           <button
                             onClick={() => {
-                              setConfig(p.config)
+                              setConfig({ ...DEFAULT_CONFIG, ...p.config })
                               setActivePreset('')
                               setDarkContent(
                                 p.config.tintOpacity > 0.3 && isDarkTint(p.config.tint)
                               )
+                              toast({ title: '已载入预设', description: p.name })
                             }}
                             className="flex min-w-0 flex-1 items-center gap-2 text-left"
                             data-testid="apply-saved"
@@ -527,13 +537,14 @@ export function GlassLab() {
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7 shrink-0"
-                            aria-label={`复制 ${p.name}`}
+                            aria-label={`载入参数 ${p.name}`}
+                            title="载入参数"
                             onClick={() => {
-                              setConfig(p.config)
+                              setConfig({ ...DEFAULT_CONFIG, ...p.config })
                               toast({ title: '已载入参数', description: p.name })
                             }}
                           >
-                            <Copy className="h-3.5 w-3.5" />
+                            <Import className="h-3.5 w-3.5" />
                           </Button>
                           <Button
                             variant="ghost"
@@ -571,7 +582,7 @@ export function GlassLab() {
             </a>{' '}
             (Apache-2.0)
           </span>
-          <span>第一阶段全面深度检查 · 2/5 全局样式与布局层</span>
+          <span>第一阶段全面深度检查 · 3/5 UI 组件层</span>
         </div>
       </footer>
     </div>
