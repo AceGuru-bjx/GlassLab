@@ -241,6 +241,7 @@ export function GlassLab() {
   const [darkContent, setDarkContent] = useState(false)
   const [presetName, setPresetName] = useState('')
   const [saving, setSaving] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [saved, setSaved] = useState<SavedPreset[]>([])
   const [loadingSaved, setLoadingSaved] = useState(true)
 
@@ -287,12 +288,17 @@ export function GlassLab() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, config }),
       })
-      if (!res.ok) throw new Error('保存失败')
+      if (!res.ok) {
+        throw new Error(res.status === 400 ? '名称或参数不合法' : '请检查网络后重试')
+      }
       setPresetName('')
       toast({ title: '预设已保存', description: name })
       fetchSaved()
-    } catch {
-      toast({ title: '保存失败', description: '请检查网络后重试' })
+    } catch (e) {
+      toast({
+        title: '保存失败',
+        description: e instanceof Error ? e.message : '请检查网络后重试',
+      })
     } finally {
       setSaving(false)
     }
@@ -300,6 +306,7 @@ export function GlassLab() {
 
   const deletePreset = useCallback(
     async (id: string) => {
+      setDeletingId(id)
       try {
         const res = await fetch(`/api/presets/${id}`, { method: 'DELETE' })
         if (!res.ok) throw new Error()
@@ -307,6 +314,8 @@ export function GlassLab() {
         toast({ title: '已删除预设' })
       } catch {
         toast({ title: '删除失败' })
+      } finally {
+        setDeletingId(null)
       }
     },
     []
@@ -329,7 +338,7 @@ export function GlassLab() {
             </div>
           </div>
           <span className="hidden rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-medium text-emerald-600 sm:inline-block">
-            Phase 1 · 检查 3/5 进行中
+            Phase 1 · 检查 4/5 进行中
           </span>
         </div>
       </header>
@@ -471,6 +480,7 @@ export function GlassLab() {
                       onChange={e => setPresetName(e.target.value)}
                       placeholder="预设名称…"
                       className="h-9 text-xs"
+                      maxLength={48}
                       aria-label="预设名称"
                     />
                     <Button
@@ -552,9 +562,14 @@ export function GlassLab() {
                             className="h-7 w-7 shrink-0 text-destructive"
                             aria-label={`删除 ${p.name}`}
                             data-testid="delete-saved"
+                            disabled={deletingId === p.id}
                             onClick={() => deletePreset(p.id)}
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            {deletingId === p.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
                           </Button>
                         </div>
                       ))
@@ -582,7 +597,7 @@ export function GlassLab() {
             </a>{' '}
             (Apache-2.0)
           </span>
-          <span>第一阶段全面深度检查 · 3/5 UI 组件层</span>
+          <span>第一阶段全面深度检查 · 4/5 交互功能与数据层</span>
         </div>
       </footer>
     </div>
