@@ -39,7 +39,11 @@ function supportsSvgBackdrop(): boolean {
   if (typeof window === 'undefined') return false
   const ua = window.navigator.userAgent
   const isSafari = /^((?!chrome|android|crios|fxios).)*safari/i.test(ua)
-  if (isSafari) return false
+  // Firefox parses url() in backdrop-filter but does not render SVG filter
+  // references there (bugzilla #1738191) — CSS.supports only checks syntax,
+  // so Firefox must be excluded explicitly to reach the blur fallback.
+  const isFirefox = /firefox|fxios/i.test(ua)
+  if (isSafari || isFirefox) return false
   return (
     typeof CSS !== 'undefined' &&
     (CSS.supports?.('backdrop-filter', 'url(#f) blur(1px)') ?? false)
