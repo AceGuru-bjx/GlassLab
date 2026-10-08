@@ -27,3 +27,25 @@ Stage Summary:
 - 关键决策：以 Kyant0 AGSL 着色器逐式移植（canvas 位移贴图 + SVG 滤镜链）替代不可用的 npm 包；发现并记录 backdrop root 隔离陷阱
 - GitHub 产物：repo AceGuru-bjx/GlassLab（2 commits，CI 绿）、Project 1（5 项检查任务）、issues #1–#9（#6–#9 已闭环）
 - 下一步：检查 2/5（全局样式与布局层，issue #2）
+
+---
+Task ID: 2
+Agent: Z.ai Code (main agent)
+Task: 检查 2/5（全局样式与布局层，issue #2）：深度检查 → 提 Issue → 修复 → CI 推送 → 闭环
+
+Work Log:
+- 审查 globals.css / layout.tsx / page.tsx / tailwind.config.ts / postcss.config.mjs / components.json / utils.ts + 布局骨架，交叉验证 package.json 依赖与 v4 体系
+- 确认 7 个缺陷并逐条提 Issue：#10 死配置 tailwind.config.ts+幽灵依赖（高）、#11 html lang=en、#12 favicon 外部 CDN、#16 移动端 390px 水平溢出（浏览器实测新增发现）、#13 page.tsx 多余 use client、#14 .glass-range 无焦点指示+缺 Firefox 轨道、#15 Header/Footer 进度文案过期
+- 修复全部 7 项：删 tailwind.config.ts、移除 tailwindcss-animate、lang=zh-CN、本地 /logo.svg、Server Component 外壳、focus-visible+moz-track、grid-cols-1+三栏 min-w-0+max-w-full、文案 2/5
+- Agent Browser 双端实测：移动 scrollWidth 390==clientWidth（修复前 410 溢出）；桌面 1440 三栏+320px 卡片无回归；预设/背景切换、滑块键盘焦点 outline solid 2px、保存预设 POST 201 全通过；控制台 0 错误
+- 提交 7aaa12b 推送 → CI run 37733660457 success → 报告回帖 #2 并关闭 → Project 条目 Done
+- 闭环时暴露 scripts/set-project-status.sh 三重 bug（field→fields 非法查询、mutation 转义错误从未成功过、错误静默）→ 提 #17 → 修复并提交 7f3686f → CI success → 回帖闭环
+- 连带补齐：issue #1 的 Project 条目状态在本脚本修复后才真正置为 Done（第 1 批当时并未落地）
+
+Stage Summary:
+- 检查 2/5 完成闭环：7 个样式/布局缺陷 + 1 个工具链缺陷全部 Issue→Fix→CI→关闭
+- 关键决策：Tailwind v4 CSS-first 体系下删除而非移植 v3 配置；拖拽卡片上限从视口相对(86vw)改为容器相对(max-w-full)；布局网格显式 grid-cols-1 + min-w-0 三件套
+- 沉淀陷阱：GraphQL 单数 field 不接受 first；shell 单引号内 JSON 转义用 \"（\\\" 会让 GraphQL 源码出现非法 \"）
+- 遗留观察：glass-lab 中 dark: 变体永不激活（未接 next-themes），移交 3/5 组件层决策
+- GitHub 产物：repo 4 commits（CI 全绿）、issues #10–#17 全部关闭、Project 条目 #1 #2 Done
+- 下一步：检查 3/5（issue #3，UI 组件层）
