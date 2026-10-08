@@ -49,3 +49,24 @@ Stage Summary:
 - 遗留观察：glass-lab 中 dark: 变体永不激活（未接 next-themes），移交 3/5 组件层决策
 - GitHub 产物：repo 4 commits（CI 全绿）、issues #10–#17 全部关闭、Project 条目 #1 #2 Done
 - 下一步：检查 3/5（issue #3，UI 组件层）
+
+---
+Task ID: 3
+Agent: Z.ai Code (main agent)
+Task: 检查 3/5（UI 组件层，issue #3）：深度检查 → 提 Issue → 修复 → CI 推送 → 闭环
+
+Work Log:
+- 圈定范围：glass 三组件 + 实际引用的 7 个 shadcn ui 组件 + Toaster 链路 + hooks；交叉核对 GlassConfig 类型与滤镜链消费方式
+- 浏览器实测拖拽卡片定位：topOffset 100 vs bottomGap 163 → 垂直偏移 -63px（-mt-[180px] 硬编码假设卡高 360px，实际 297px）
+- 确认 6 个缺陷并提 Issue #18–#23：卡片居中（中）、已存预设未合并默认值 NaN 崩坏（中）、复制按钮语义错位（低）、dark: 死变体决策（低）、GlassPill 深背景不可读（低）、手电图标/装饰图标无障碍细节（低）
+- 修复：flex 容器居中（兼容 framer drag）；应用预设合并 DEFAULT_CONFIG；Copy→Import「载入参数」语义+主按钮补 toast；删 dark:text-emerald-400 死类（决策：不接 next-themes，视觉实验室明暗由舞台参数自管）；GlassPill dark prop + BackgroundOption.dark 标记；Flashlight 图标 + aria-hidden + 清理未使用导入
+- 浏览器复验：居中 0/0；真实鼠标拖拽 +90px（合成 PointerEvent 位移 0 系 framer 仅响应可信输入，非缺陷）；暗夜背景 Pill 文字 rgb(255,255,255)；载入链路 toast 正常；390px 无溢出；控制台 0 error
+- 提交 50397db 推送 → CI success → 报告回帖 #3 并关闭 → Project 条目 Done
+
+Stage Summary:
+- 检查 3/5 完成闭环：6 个组件层缺陷全部 Issue→Fix→CI→关闭
+- 关键决策：不接 next-themes（#21 记录）；拖拽元素定位一律用 flex 容器而非负 margin/CSS transform（framer 会接管 transform）；framer 拖拽测试必须用可信输入（agent-browser mouse），合成 PointerEvent 不算数
+- 沉淀陷阱：服务端来的 config 必须与 DEFAULT_CONFIG 合并再进滤镜链（NaN 会让 feDisplacementMap scale 失效、整链崩坏）
+- 观察项移交：use-mobile/sidebar 等模板死代码保留（零运行时成本，已记录）；位移贴图重绘无时间节流（性能观察，非缺陷）
+- GitHub 产物：repo 7 commits（CI 全绿）、issues #18–#23 关闭、Project 条目 #3 Done
+- 下一步：检查 4/5（issue #4，API 与数据层）
