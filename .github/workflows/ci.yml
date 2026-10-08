@@ -62,8 +62,13 @@ jobs:
 
       # The SQLite database is gitignored — create it from the schema so the
       # standalone bundle ships with a working database (see issue #31).
+      # Absolute path on purpose: Prisma resolves relative sqlite URLs against
+      # the schema directory (prisma/), which silently wrote the db outside
+      # the tree the build script copies from.
       - name: Provision database
         run: mkdir -p db && bunx prisma db push --accept-data-loss
+        env:
+          DATABASE_URL: file:${{ github.workspace }}/db/custom.db
 
       - name: Build
         run: bun run build
@@ -100,7 +105,9 @@ jobs:
       - name: Start & probe
         working-directory: standalone
         env:
-          DATABASE_URL: file:./db/custom.db
+          # Absolute: relative sqlite URLs are resolved against the schema
+          # directory baked in at generate time — not the process CWD.
+          DATABASE_URL: file:${{ github.workspace }}/db/custom.db
           PORT: "3100"
           HOSTNAME: 127.0.0.1
         run: |
@@ -120,7 +127,11 @@ jobs:
 
           # Golden path against the bundled database.
           echo "--- GET /api/presets ---"
-          curl -sf http://127.0.0.1:3100/api/presets
+          if ! curl -sf http://127.0.0.1:3100/api/presets; then
+            echo
+            cat server.log
+            exit 1
+          fi
           echo
           code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3100/logo.svg)
           echo "GET /logo.svg -> $code"

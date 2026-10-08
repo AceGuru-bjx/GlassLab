@@ -29,7 +29,9 @@ bun run dev            # http://localhost:3000，日志 tee 到 dev.log
 ```bash
 bun run build
 # 产物 = .next/standalone（已含 public/ 与 db/custom.db 若存在）
-DATABASE_URL=file:./db/custom.db PORT=3000 node .next/standalone/server.js
+# 注意：SQLite 相对路径按 Prisma schema 目录解析而非进程 CWD，
+#       产物环境请使用绝对路径。
+DATABASE_URL="file:$(pwd)/db/custom.db" PORT=3000 node .next/standalone/server.js
 ```
 
 CI（`.github/workflows/ci.yml`）三道门禁 + 干净环境冒烟：
