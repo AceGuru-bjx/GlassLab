@@ -93,3 +93,28 @@ Stage Summary:
 - 观察项移交：take:100 静默截断、坏行无 UI 删除入口（当前无此类数据）
 - GitHub 产物：repo 9 commits（CI 全绿）、issues #24–#30 关闭、Project 条目 #4 Done
 - 下一步：检查 5/5（issue #5，构建部署与资源层）——最后一批
+
+---
+Task ID: 5
+Agent: Z.ai Code (main agent)
+Task: 检查 5/5（构建部署与资源层，issue #5）：深度检查 → 提 Issue → 修复 → CI 推送 → 闭环（最终批）
+
+Work Log:
+- 圈定范围：next.config / package.json（脚本+依赖）/ tsconfig / ci.yml / eslint / postcss / components.json / .gitignore / public 资产 / robots / git 跟踪卫生 / dev.log 扫描 / 浏览器兼容矩阵
+- 审查确认 4 项缺陷并提 Issue #31–#34：
+  - #31 [高] standalone 产物缺 db（build 不复制且 CI 无库）、运行时缺 DATABASE_URL、零启动验证——验收「产物可干净环境启动」从未满足
+  - #32 [中] 幽灵依赖 ×17（import 图全量审计；实证保留 prisma CLI / react-dom peer 两个假幽灵）
+  - #33 [低] Firefox 走 CSS.supports 语法检测误判 active（url() backdrop-filter 不渲染，Bugzilla #1738191）→ 无降级
+  - #34 [低] 零文档（无 README）+ 脚手架元数据
+- 修复：build 分组容错打包 db；CI 建库 + tar 打包 + 新增 smoke job（下载 artifact 裸环境 node server.js 探测 / /api/presets /logo.svg）+ if-no-files-found:error + Bun 固定 1.3.14；Firefox UA 排除；README + name/description/repository
+- smoke 三次迭代拦截 2 个产物形态真实缺陷：① upload-artifact v4 静默丢点目录（.next 整目录缺席）→ tar 显式打包；② Prisma 相对 SQLite 路径按 schema 目录解析（db 落到 prisma/db/，cp WARN 被容错掩盖）→ CI 绝对路径 + smoke 用 $(pwd)
+- 本地 artifact 实测：解压直跑 / 200、/api/presets 200（真实数据行）、/logo.svg 200、Ready 74ms
+- UA 矩阵 eval 验证：chrome=true / safari=false / firefox=false，Chromium live 无回归；资源层全数引用、robots 合法、dev.log 零运行时错误
+- 提交链 79737b1→86039da→d2cb59e→02bd3d6 → CI run 37760213702 三 job 全绿 → #31–#34 自动关闭 → 报告回帖 #5 并关闭 → Project #5 Done
+
+Stage Summary:
+- 检查 5/5 闭环：4 缺陷全 Issue→Fix→CI→关闭；CI 升级为四阶段门禁（quality/build/**smoke**）
+- 沉淀陷阱：upload-artifact v4 默认排除点目录（.next 必须显式 tar）；Prisma SQLite 相对路径相对 schema 目录而非 CWD；CSS.supports 只验语法不验渲染（Firefox url() backdrop-filter）
+- 资源层结论：壁纸 568K/4 张体量健康、无死资产、robots 合法、generated 文件未跟踪
+- 第一阶段 5/5 全部闭环：25 缺陷（4+8+6+7+4）全流程关闭，Project 5 条目全 Done，CI 四阶段全绿，产物经裸环境验证可启动
+- GitHub 产物：repo 14 commits、issues #1–#34 全闭环、README 就位
