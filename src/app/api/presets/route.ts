@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { getSessionUserIdOrNull } from '@/lib/session'
@@ -134,12 +135,12 @@ export async function GET(req: NextRequest) {
       // SQLite `contains` is a substring match (case-insensitive for ASCII).
       ...(q ? { name: { contains: q } } : {}),
     }
-    const orderBy =
+    const orderBy: Prisma.GlassPresetOrderByWithRelationInput[] =
       sort === 'name'
-        ? ({ name: 'asc' } as const)
+        ? [{ name: 'asc' }]
         : sort === 'favorites'
           ? [{ favorite: 'desc' }, { createdAt: 'desc' }]
-          : { createdAt: 'desc' }
+          : [{ createdAt: 'desc' }]
 
     const [rows, total] = await Promise.all([
       db.glassPreset.findMany({ where, orderBy, take: PRESET_LIST_LIMIT }),
