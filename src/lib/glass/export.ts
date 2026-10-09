@@ -75,7 +75,10 @@ export function configToReact(config: GlassConfig): string {
 
 const config = ${JSON.stringify(config, null, 2)}
 
-const css = \`${css}\`
+// JSON.stringify keeps the CSS a single escaped string literal — tint/glow
+// from share payloads can contain backticks or \${...} which would corrupt
+// a bare template literal (#54).
+const css = ${JSON.stringify(css)}
 
 export function LiquidGlassCard({
   children,
