@@ -161,3 +161,26 @@ Stage Summary:
 - 关键决策：图片字节落 SQLite（standalone 产物天然携带，与 db 形态一致）而非文件系统；封面用 Canvas2D 近似渲染而非 html2canvas（零依赖、backdrop-filter 无法被第三方库正确栅格化）；对比分屏用双背景副本+clip-path 而非单层裁剪
 - 沉淀：会话时效性与数据一致性——任何 JWT 中的 userId 落库前必须校验存在性（账户删除后的 stale cookie 是真实场景）
 - GitHub 产物：repo 22 commits（CI 全绿）、issues #38-#40 闭环、Project 第二/三阶段条目全 Done
+
+---
+Task ID: 8
+Agent: Z.ai Code (main agent)
+Task: 第四阶段功能增强：M1 预设收藏/搜索/排序 / M2 撤销重做历史栈 / M3 灵感生成器（issues #41-#43）
+
+Work Log:
+- 前置核实：Phase 1（#1-#34）与 Phase 2（#35-#37）、Phase 3（#38-#40）全部闭环；建第四阶段 3 个 issue 并加入 Project v2
+- M1（147f459 + ff68f1b，CI 绿）：GlassPreset.favorite Boolean @default(false)；PATCH /api/presets/[id]（zod 单布尔、1KB 上限、DELETE 镜像所有权、P2025→404）；GET /api/presets 支持 q（trim/≤48/空值=无过滤）+ sort（recent|name|favorites），响应 {presets,total,limit}——take:100 静默截断遗留观察项就此解决；UI 星标乐观切换+回滚、300ms 防抖搜索、排序下拉、截断提示、搜索空态
+- M1 CI 拦截 1 次：三元 orderBy 数组分支 'desc' 被推断为 string（TS2322）→ 显式 Prisma.GlassPresetOrderByWithRelationInput[] 修复；根因是本地验证命令 npx tsc | tail && echo 被管道吞掉 exit code 造成假阴性——后续一律 bunx tsc --noEmit; echo TSC=$?
+- M2（7b47f71，CI 绿）：ref 历史栈（上限 50）存 {config,activePreset} 快照 + depth 快照 state；checkpoint 每手势一次（滑杆 onPointerDown、Switch onCheckedChange、应用预设、我的预设载入、载入参数、分享链接深载入）；JSON 去重跳空抓取；新分支清 redo 尾；undo/redo 恢复 config+activePreset（高亮跟随历史）；Ctrl/Cmd+Z、Ctrl+Shift+Z/Ctrl+Y，输入焦点与对比模式跳过
+- M3（3856fa8，CI 绿）：RANDOM_RANGES 审美区间（API zod 与 UI 滑杆双区间内部）；9 参数随机 + depthEffect/overLight 随机 + tint/glow 不动；每参数 Lock/LockOpen 会话锁定；变体 ±15% 钳 UI 区间；生成动作入撤销栈+清高亮+toast；对比模式禁用
+- M3 过程修复：生成器区块初版在 pushHistory 声明前，依赖数组渲染期求值触发 TDZ（Cannot access 'pushHistory' before initialization）→ 区块上移消除；HMR 中间态 3 条 hook 报错经全新会话验证为残留
+- dev.sh 不支持 restart 子命令（参数被忽略）——schema 变更后需手动 kill 旧 next-server 再 bash .zscripts/dev.sh
+- 验证：M1 curl 13 例边界全过 + 浏览器星标/搜索/排序/截断提示（108 条压测「共 108 条，当前显示 100 条」后清理）；M2 浏览器 E2E（拖动往返、高亮恢复、Switch 入栈、输入框不劫持、对比零副作用 27 步栈保持）；M3 脚本化断言（20 轮双区间、锁定 5 轮不变、变体 ±15% 带内、栈 27→28→27、保存往返 EXACT_MATCH）；三里程碑 0 console error
+- 提交链 147f459→ff68f1b→7b47f71→3856fa8，CI run 37930817746（failure→修复）→37931111703/37932055384/37933097718 全绿，#41-#43 报告回帖关闭，Project 三条目 Done
+
+Stage Summary:
+- 第四阶段三里程碑全部闭环：预设收藏搜索排序 / 撤销重做快捷键 / 灵感生成器
+- 关键决策：total 计数含损坏行（诚实反映库态，UI 提示文案中性）；收藏规则镜像 DELETE（公共开放、私有 owner）；历史栈存 ref 而非 state（拖动性能）且快照含 activePreset（高亮精确恢复）；随机范围刻意偏离 zod 极限（审美优先且保证可保存）
+- 沉淀陷阱：①本地 tsc 检查经管道会吞 exit code（npx tsc | tail && echo 假阴性），必须直接看 $?；②useCallback 依赖数组在渲染期求值，引用后置声明的 const 会 TDZ；③agent-browser CDP fill 对受控 Input 会失联（DOM 值变但 React state 不同步），原生 setter+input 事件是可靠路径；④agent-browser errors 的空 ✗ 行需用 --json 看真实内容，历史错误跨 reload 缓冲
+- 遗留观察项清零：take:100 静默截断（M1 解决）；坏行 UI 删除入口仍无（当前库无坏行，API 可删）；拖拽时间节流（性能观察非缺陷，未纳入）
+- GitHub 产物：repo 26 commits（CI 全绿）、issues #41-#43 闭环、Project 第四阶段条目全 Done
