@@ -12,6 +12,8 @@ import {
   GripVertical,
   Import,
   Loader2,
+  Lock,
+  LockOpen,
   LogIn,
   LogOut,
   MousePointer2,
@@ -25,8 +27,10 @@ import {
   Trash2,
   Undo2,
   Upload,
+  Wand2,
   X,
   Redo2,
+  Dices,
 } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
@@ -201,12 +205,37 @@ function coverSpec(b: BackgroundOption): CoverBackgroundSpec {
 
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 
+/** Phase 4 M3: aesthetic random ranges — deliberately well inside both the
+ *  API zod bounds and the UI slider ranges (PARAM_ROWS min/max), so random
+ *  results always look reasonable and always save successfully. */
+const RANDOM_RANGES: Record<NumericKey, [number, number]> = {
+  refraction: [20, 70],
+  height: [10, 70],
+  dispersion: [0, 0.5],
+  blur: [2, 20],
+  saturation: [70, 200],
+  cornerRadius: [8, 48],
+  highlight: [0.1, 0.8],
+  lightAngle: [0, 360],
+  elasticity: [0.1, 0.9],
+}
+
+/** Phase 4 M3: variant jitter amplitude (±15% of the current value). */
+const VARIANT_JITTER = 0.15
+
+const randInt = (lo: number, hi: number) =>
+  Math.floor(Math.random() * (hi - lo + 1)) + lo
+const randFloat = (lo: number, hi: number) =>
+  Math.round((lo + Math.random() * (hi - lo)) * 100) / 100
+
 function ConfigPanel({
   config,
   onChange,
   darkContent,
   onDarkContentChange,
   onHistoryCheckpoint,
+  lockedParams,
+  onToggleLock,
 }: {
   config: GlassConfig
   onChange: (patch: Partial<GlassConfig>) => void
@@ -216,28 +245,52 @@ function ConfigPanel({
    *  flip) so the pre-interaction state lands on the undo stack exactly once
    *  per gesture — continuous slider onChange must NOT push. */
   onHistoryCheckpoint?: () => void
+  /** Phase 4 M3: locked numeric keys keep their values on randomize. */
+  lockedParams: Set<NumericKey>
+  onToggleLock: (key: NumericKey) => void
 }) {
   return (
     <div className="space-y-5" data-testid="config-panel">
-      {PARAM_ROWS.map(r => (
-        <div key={r.key} className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label className="text-xs text-muted-foreground">{r.label}</Label>
-            <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] tabular-nums text-muted-foreground">
-              {r.fmt(config[r.key])}
-            </span>
+      {PARAM_ROWS.map(r => {
+        const locked = lockedParams.has(r.key)
+        return (
+          <div key={r.key} className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1">
+                <Label className="text-xs text-muted-foreground">{r.label}</Label>
+                <button
+                  type="button"
+                  onClick={() => onToggleLock(r.key)}
+                  aria-label={locked ? `解锁 ${r.label}` : `锁定 ${r.label}`}
+                  aria-pressed={locked}
+                  title={locked ? '随机时保持该参数' : '锁定该参数'}
+                  data-testid={`lock-${r.key}`}
+                  className={cn(
+                    'rounded p-0.5 transition-colors',
+                    locked
+                      ? 'text-amber-500 hover:text-amber-400'
+                      : 'text-muted-foreground/35 hover:text-muted-foreground'
+                  )}
+                >
+                  {locked ? <Lock className="h-3 w-3" /> : <LockOpen className="h-3 w-3" />}
+                </button>
+              </span>
+              <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] tabular-nums text-muted-foreground">
+                {r.fmt(config[r.key])}
+              </span>
+            </div>
+            <Slider
+              value={[config[r.key]]}
+              min={r.min}
+              max={r.max}
+              step={r.step}
+              aria-label={r.label}
+              onPointerDown={onHistoryCheckpoint}
+              onValueChange={([v]) => onChange({ [r.key]: v } as Partial<GlassConfig>)}
+            />
           </div>
-          <Slider
-            value={[config[r.key]]}
-            min={r.min}
-            max={r.max}
-            step={r.step}
-            aria-label={r.label}
-            onPointerDown={onHistoryCheckpoint}
-            onValueChange={([v]) => onChange({ [r.key]: v } as Partial<GlassConfig>)}
-          />
-        </div>
-      ))}
+        )
+      })}
 
       <Separator />
 
@@ -566,6 +619,53 @@ export function GlassLab() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [compareOn, undo, redo])
+
+  // ---- Phase 4 M3: inspiration generator ----
+  const [lockedParams, setLockedParams] = useState<Set<NumericKey>>(() => new Set())
+  const toggleLock = useCallback((key: NumericKey) => {
+    setLockedParams(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }, [])
+
+  const randomizeConfig = useCallback(() => {
+    pushHistory()
+    setConfig(c => {
+      const next: GlassConfig = { ...c }
+      for (const r of PARAM_ROWS) {
+        if (lockedParams.has(r.key)) continue
+        const [lo, hi] = RANDOM_RANGES[r.key]
+        // integer steps for px/% params, two decimals for 0..1 ratios
+        next[r.key] = (r.step >= 1 ? randInt(lo, hi) : randFloat(lo, hi)) as GlassConfig[NumericKey]
+      }
+      next.depthEffect = Math.random() < 0.5
+      next.overLight = Math.random() < 0.5
+      return next
+    })
+    setActivePreset('')
+    toast({ title: '已生成随机灵感', description: '锁定项保持不变' })
+  }, [lockedParams, pushHistory])
+
+  const variantConfig = useCallback(() => {
+    pushHistory()
+    setConfig(c => {
+      const next: GlassConfig = { ...c }
+      for (const r of PARAM_ROWS) {
+        if (lockedParams.has(r.key)) continue
+        const jittered = c[r.key] * (1 + (Math.random() * 2 - 1) * VARIANT_JITTER)
+        // clamp into the UI slider range (variants start from the current
+        // value, not the aesthetic random range)
+        const clamped = Math.min(r.max, Math.max(r.min, jittered))
+        next[r.key] = (r.step >= 1 ? Math.round(clamped) : Math.round(clamped * 100) / 100) as GlassConfig[NumericKey]
+      }
+      return next
+    })
+    setActivePreset('')
+    toast({ title: '已生成变体', description: '基于当前参数 ±15% 微调' })
+  }, [lockedParams, pushHistory])
 
   const patch = useCallback((p: Partial<GlassConfig>) => {
     setConfig(c => ({ ...c, ...p }))
@@ -1384,14 +1484,42 @@ export function GlassLab() {
                     <Redo2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>
-                {historyDepth.undo > 0 && (
-                  <span
-                    className="text-[10px] tabular-nums text-muted-foreground"
-                    data-testid="history-depth"
+                <div className="flex items-center gap-1.5">
+                  {historyDepth.undo > 0 && (
+                    <span
+                      className="text-[10px] tabular-nums text-muted-foreground"
+                      data-testid="history-depth"
+                    >
+                      可撤销 {historyDepth.undo} 步
+                    </span>
+                  )}
+                  {/* Phase 4 M3: inspiration generator */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 gap-1 px-2 text-xs"
+                    aria-label="从当前参数生成变体"
+                    title="变体：基于当前参数 ±15% 微调（锁定项不变）"
+                    data-testid="variant-btn"
+                    disabled={compareOn}
+                    onClick={variantConfig}
                   >
-                    可撤销 {historyDepth.undo} 步
-                  </span>
-                )}
+                    <Wand2 className="h-3.5 w-3.5" />
+                    变体
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="h-7 gap-1 px-2 text-xs"
+                    aria-label="随机灵感"
+                    title="随机灵感：在审美区间内随机全部参数（锁定项不变）"
+                    data-testid="randomize-btn"
+                    disabled={compareOn}
+                    onClick={randomizeConfig}
+                  >
+                    <Dices className="h-3.5 w-3.5" />
+                    随机灵感
+                  </Button>
+                </div>
               </div>
               <Tabs defaultValue="params">
                 <TabsList className="mb-4 grid w-full grid-cols-3">
@@ -1412,6 +1540,8 @@ export function GlassLab() {
                     darkContent={darkContent}
                     onDarkContentChange={setDarkContent}
                     onHistoryCheckpoint={pushHistory}
+                    lockedParams={lockedParams}
+                    onToggleLock={toggleLock}
                   />
                   <Separator className="my-4" />
                   <div className="flex items-center gap-2">
