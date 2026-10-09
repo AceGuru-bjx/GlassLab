@@ -152,6 +152,23 @@ export async function generateGlassCover(
       ctx.fillStyle = 'rgba(15, 23, 42, 0.30)'
       ctx.fillRect(x - 4, y - 4, w + 8, h + 8)
     }
+
+    // Phase 5 vignette approximation (radial corner darkening).
+    const vg = Math.max(0, Math.min(1, config.vignette ?? 0))
+    if (vg > 0.01) {
+      const vgGrad = ctx.createRadialGradient(
+        x + w / 2,
+        y + h / 2,
+        Math.min(w, h) * 0.3,
+        x + w / 2,
+        y + h / 2,
+        Math.max(w, h) * 0.75
+      )
+      vgGrad.addColorStop(0, 'rgba(0,0,0,0)')
+      vgGrad.addColorStop(1, `rgba(0,0,0,${(0.55 * vg).toFixed(3)})`)
+      ctx.fillStyle = vgGrad
+      ctx.fillRect(x, y, w, h)
+    }
     ctx.restore()
 
     // fresnel rim highlight along lightAngle

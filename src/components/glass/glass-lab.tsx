@@ -164,6 +164,9 @@ type NumericKey = keyof Pick<
   | 'highlight'
   | 'lightAngle'
   | 'elasticity'
+  | 'frost'
+  | 'edgeBlur'
+  | 'vignette'
 >
 
 const PARAM_ROWS: {
@@ -183,6 +186,10 @@ const PARAM_ROWS: {
   { key: 'highlight', label: '菲涅尔高光', min: 0, max: 1, step: 0.01, fmt: v => `${Math.round(v * 100)}%` },
   { key: 'lightAngle', label: '光源角度', min: 0, max: 360, step: 5, fmt: v => `${v}°` },
   { key: 'elasticity', label: '拖拽弹性', min: 0, max: 1, step: 0.05, fmt: v => `${Math.round(v * 100)}%` },
+  // ---- Phase 5 layered effects ----
+  { key: 'edgeBlur', label: '边缘高斯弥散', min: 0, max: 1, step: 0.05, fmt: v => `${Math.round(v * 100)}%` },
+  { key: 'frost', label: '磨砂噪点', min: 0, max: 1, step: 0.05, fmt: v => `${Math.round(v * 100)}%` },
+  { key: 'vignette', label: '暗角', min: 0, max: 1, step: 0.05, fmt: v => `${Math.round(v * 100)}%` },
 ]
 
 /** Map a stage background option to the canvas cover generator spec. */
@@ -209,6 +216,9 @@ const RANDOM_RANGES: Record<NumericKey, [number, number]> = {
   highlight: [0.1, 0.8],
   lightAngle: [0, 360],
   elasticity: [0.1, 0.9],
+  frost: [0, 0.4],
+  edgeBlur: [0, 0.5],
+  vignette: [0, 0.35],
 }
 
 /** Phase 4 M3: variant jitter amplitude (±15% of the current value). */
@@ -1037,7 +1047,7 @@ export function GlassLab() {
           </div>
           <div className="flex items-center gap-2">
             <span className="hidden rounded-full border border-teal-500/30 bg-teal-500/10 px-2.5 py-1 text-[10px] font-medium text-teal-600 sm:inline-block">
-              Phase 4 · 工作流效率与预设管理进行中
+              Phase 5 · 效果扩展与五批深度检查进行中
             </span>
             {sessionStatus === 'loading' ? (
               <div className="h-8 w-20 animate-pulse rounded-lg bg-muted" aria-hidden />
@@ -1758,7 +1768,7 @@ export function GlassLab() {
             </a>{' '}
             (Apache-2.0)
           </span>
-          <span>第四阶段功能增强 · 预设收藏搜索 / 撤销重做 / 灵感生成器（M1–M3）</span>
+          <span>第五阶段 · 玻璃效果扩展（边缘高斯弥散 / 磨砂噪点 / 暗角）+ 五批全面深度检查</span>
         </div>
       </footer>
     </div>

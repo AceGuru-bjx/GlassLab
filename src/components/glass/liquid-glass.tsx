@@ -71,6 +71,7 @@ function LiquidGlassImpl({
   const cBId = `cb-${rawId}`
   const rgId = `rg-${rawId}`
   const satId = `st-${rawId}`
+  const noiseId = `nz-${rawId}`
 
   const hostRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
@@ -180,6 +181,16 @@ function LiquidGlassImpl({
     ((Math.round(Number.isFinite(config.lightAngle) ? config.lightAngle : 45) % 360) + 360) % 360
   const rimAngle = overLight ? (lightAngleDeg + 90) % 360 : lightAngleDeg
 
+  // ---- Phase 5 layered effects ----
+  const frost = Math.max(0, Math.min(1, config.frost ?? 0))
+  const edgeBlur = Math.max(0, Math.min(1, config.edgeBlur ?? 0))
+  const vignette = Math.max(0, Math.min(1, config.vignette ?? 0))
+  // Frosted grain: feTurbulence -> white grain w/ noise-derived alpha.
+  // Pure SVG-filter overlay, so unlike the refraction path it also works
+  // on Safari/Firefox (no backdrop url() needed).
+  const edgeBand = Math.round(6 + edgeBlur * 22)
+  const edgeBlurPx = (edgeBlur * 26).toFixed(1)
+
   return (
     <div
       ref={hostRef}
@@ -195,6 +206,23 @@ function LiquidGlassImpl({
         style={{ position: 'absolute', pointerEvents: 'none' }}
       >
         <defs>
+          {frost > 0.01 && (
+            <filter id={noiseId} x="0" y="0" width="100%" height="100%">
+              <feTurbulence
+                type="fractalNoise"
+                baseFrequency="0.82"
+                numOctaves={2}
+                stitchTiles="stitch"
+                result="turb"
+              />
+              {/* White grain whose alpha follows the noise luminance. */}
+              <feColorMatrix
+                in="turb"
+                type="matrix"
+                values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0.34 0.34 0.34 0 0"
+              />
+            </filter>
+          )}
           <filter
             id={filterId}
             x="0"
@@ -340,6 +368,53 @@ function LiquidGlassImpl({
             background: overLight
               ? `rgba(15, 18, 25, ${Math.max(0.35, config.tintOpacity)})`
               : tintRgba,
+          }}
+        />
+      )}
+
+      {/* Phase 5: vignette — radial corner darkening */}
+      {vignette > 0.01 && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            ...radiusStyle(),
+            background: `radial-gradient(ellipse at center, transparent 52%, rgba(0,0,0,${(
+              0.55 * vignette
+            ).toFixed(3)}) 100%)`,
+          }}
+        />
+      )}
+
+      {/* Phase 5: progressive gaussian edge blur — a backdrop-blur ring
+          masked to the outer band (layered blur, center stays crisp). */}
+      {edgeBlur > 0.01 && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            ...radiusStyle(),
+            padding: edgeBand,
+            backdropFilter: `blur(${edgeBlurPx}px)`,
+            WebkitBackdropFilter: `blur(${edgeBlurPx}px)`,
+            WebkitMask:
+              'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
+            WebkitMaskComposite: 'xor',
+            mask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
+            maskComposite: 'exclude',
+          }}
+        />
+      )}
+
+      {/* Phase 5: frosted grain overlay */}
+      {frost > 0.01 && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            ...radiusStyle(),
+            filter: `url(#${noiseId})`,
+            opacity: (frost * 0.5).toFixed(3),
           }}
         />
       )}

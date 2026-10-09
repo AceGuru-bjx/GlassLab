@@ -19,6 +19,8 @@ function radiusPx(cornerRadius: number): string {
 /** CSS body shared by the CSS and React exports. */
 function cssBody(config: GlassConfig): string {
   const hl = Math.max(0, Math.min(1, config.highlight))
+  const frost = Math.max(0, Math.min(1, config.frost ?? 0))
+  const vignette = Math.max(0, Math.min(1, config.vignette ?? 0))
   const glow =
     config.glow && config.glow !== 'transparent'
       ? `,\n  0 0 24px 2px ${config.glow}`
@@ -27,17 +29,25 @@ function cssBody(config: GlassConfig): string {
     config.tintOpacity > 0
       ? `\n  /* 染色 ${Math.round(config.tintOpacity * 100)}% */\n  background: ${withAlpha(config.tint, config.tintOpacity)};`
       : ''
+  const vignetteShadow =
+    vignette > 0.01
+      ? `, inset 0 0 48px rgba(0, 0, 0, ${((0.55 * vignette) || 0).toFixed(3)})`
+      : ''
+  const frostLayer =
+    frost > 0.01
+      ? `\n\n/* 磨砂噪点 ${Math.round(frost * 100)}%（SVG feTurbulence，零 JS） */\n.liquid-glass::after {\n  content: "";\n  position: absolute;\n  inset: 0;\n  border-radius: inherit;\n  pointer-events: none;\n  opacity: ${(frost * 0.5).toFixed(3)};\n  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0.34 0.34 0.34 0 0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");\n  background-size: 180px 180px;\n}`
+      : ''
 
   return `/* 生成自 GlassLab 玻璃实验室 — https://github.com/AceGuru-bjx/GlassLab
- * 说明：blur/saturate/染色/边缘高光为纯 CSS；
- * 完整的边缘位移折射（Kyant0 算法）由 JS 位移贴图驱动，Web 版引擎见上方仓库。 */
+ * 说明：blur/saturate/染色/边缘高光/磨砂噪点/暗角为纯 CSS；
+ * 完整的边缘位移折射与分层边缘高斯弥散（Kyant0 算法）由 JS 引擎驱动，见上方仓库。 */
 .liquid-glass {
   position: relative;
   border-radius: ${radiusPx(config.cornerRadius)};
   -webkit-backdrop-filter: blur(${config.blur}px) saturate(${config.saturation}%);
   backdrop-filter: blur(${config.blur}px) saturate(${config.saturation}%);${tint}
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.12), 0 8px 32px rgba(0, 0, 0, 0.12)${glow};
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12), 0 8px 32px rgba(0, 0, 0, 0.12)${vignetteShadow}${glow};
 }
 
 /* 菲涅尔边缘高光 ${Math.round(hl * 100)}% @ ${config.lightAngle}° */
@@ -58,7 +68,7 @@ function cssBody(config: GlassConfig): string {
   -webkit-mask-composite: xor;
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask-composite: exclude;
-}`
+}${frostLayer}`
 }
 
 /** Standalone CSS export. */
@@ -155,6 +165,9 @@ export function decodeConfig(payload: string): GlassConfig | null {
       'lightAngle',
       'tintOpacity',
       'elasticity',
+      'frost',
+      'edgeBlur',
+      'vignette',
     ] as const
     for (const k of numKeys) {
       const v = Number(merged[k])

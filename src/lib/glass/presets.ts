@@ -37,6 +37,12 @@ export interface GlassConfig {
   elasticity: number
   /** Optional colored glow outside the glass */
   glow: string
+  /** Phase 5: frosted grain overlay (SVG feTurbulence noise), 0..1 */
+  frost: number
+  /** Phase 5: progressive gaussian blur ring at the glass edges, 0..1 */
+  edgeBlur: number
+  /** Phase 5: radial corner darkening (vignette), 0..1 */
+  vignette: number
 }
 
 export type GlassCategory = '经典' | '材质' | '光影' | '创意'
@@ -69,6 +75,9 @@ export const DEFAULT_CONFIG: GlassConfig = {
   overLight: false,
   elasticity: 0.55,
   glow: 'transparent',
+  frost: 0,
+  edgeBlur: 0,
+  vignette: 0,
 }
 
 export const PRESETS: GlassPreset[] = [
@@ -277,6 +286,26 @@ export const PRESETS: GlassPreset[] = [
       highlight: 0.6,
     },
   },
+  {
+    id: 'etched',
+    name: '磨砂蚀刻',
+    desc: '噪点磨砂，颗粒质感',
+    swatch: 'linear-gradient(135deg,#e7e5e4,#d6d3d1,#a8a29e)',
+    category: '材质',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 12,
+      height: 28,
+      dispersion: 0.08,
+      blur: 16,
+      saturation: 105,
+      cornerRadius: 30,
+      tintOpacity: 0.18,
+      highlight: 0.55,
+      frost: 0.55,
+      vignette: 0.25,
+    },
+  },
 
   // ------------------------------ 光影 ------------------------------
   {
@@ -389,6 +418,25 @@ export const PRESETS: GlassPreset[] = [
       highlight: 1,
       glow: 'rgba(167,139,250,0.3)',
       lightAngle: 270,
+    },
+  },
+  {
+    id: 'lens-depth',
+    name: '景深透镜',
+    desc: '边缘高斯弥散，中心清晰',
+    swatch: 'radial-gradient(circle at 50% 50%,#f8fafc 30%,#94a3b8 70%,#475569)',
+    category: '光影',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 34,
+      height: 50,
+      dispersion: 0.5,
+      blur: 2,
+      saturation: 145,
+      cornerRadius: 24,
+      highlight: 0.9,
+      edgeBlur: 0.65,
+      vignette: 0.2,
     },
   },
 
