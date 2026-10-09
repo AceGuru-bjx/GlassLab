@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { hashPassword } from '@/lib/auth'
@@ -50,16 +51,29 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '该邮箱已注册' }, { status: 409 })
     }
 
-    const user = await db.user.create({
-      data: {
-        email,
-        name: name && name.length > 0 ? name : email.split('@')[0],
-        passwordHash: hashPassword(password),
-      },
-      select: { id: true, email: true, name: true },
-    })
+    try {
+      const user = await db.user.create({
+        data: {
+          email,
+          name: name && name.length > 0 ? name : email.split('@')[0],
+          passwordHash: hashPassword(password),
+        },
+        select: { id: true, email: true, name: true },
+      })
 
-    return NextResponse.json(user, { status: 201 })
+      return NextResponse.json(user, { status: 201 })
+    } catch (error) {
+      // Concurrent register with the same email won the race between the
+      // findUnique above and this insert (P2002 unique violation) — the
+      // correct answer is 409, not the generic 500 (#52).
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        return NextResponse.json({ error: '该邮箱已注册' }, { status: 409 })
+      }
+      throw error
+    }
   } catch (error) {
     console.error('[api/auth/register] POST failed:', error)
     return NextResponse.json(

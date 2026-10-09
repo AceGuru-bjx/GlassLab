@@ -13,6 +13,14 @@ import { db } from '@/lib/db'
 
 const DEV_SECRET = 'glasslab-dev-only-secret'
 
+if (!process.env.NEXTAUTH_SECRET) {
+  // The comment below promises a loud warning — emit one (#53), so bare
+  // runs are visibly identifiable as dev-secret-signed sessions.
+  console.warn(
+    '[auth] NEXTAUTH_SECRET is not set — falling back to the dev-only secret. Sessions are NOT securely signed; dev/smoke use only.'
+  )
+}
+
 export const authOptions: NextAuthOptions = {
   // A missing NEXTAUTH_SECRET makes next-auth throw NO_SECRET in production
   // and 500 every authed route; fall back with a loud warning instead so a
