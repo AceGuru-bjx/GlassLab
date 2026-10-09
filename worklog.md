@@ -184,3 +184,28 @@ Stage Summary:
 - 沉淀陷阱：①本地 tsc 检查经管道会吞 exit code（npx tsc | tail && echo 假阴性），必须直接看 $?；②useCallback 依赖数组在渲染期求值，引用后置声明的 const 会 TDZ；③agent-browser CDP fill 对受控 Input 会失联（DOM 值变但 React state 不同步），原生 setter+input 事件是可靠路径；④agent-browser errors 的空 ✗ 行需用 --json 看真实内容，历史错误跨 reload 缓冲
 - 遗留观察项清零：take:100 静默截断（M1 解决）；坏行 UI 删除入口仍无（当前库无坏行，API 可删）；拖拽时间节流（性能观察非缺陷，未纳入）
 - GitHub 产物：repo 26 commits（CI 全绿）、issues #41-#43 闭环、Project 第四阶段条目全 Done
+
+---
+Task ID: 9
+Agent: Z.ai Code (main agent)
+Task: 第五阶段——前四阶段自检 + 五批全面深度检查（issues #44-#48）+ 玻璃效果扩展（#49）
+
+Work Log:
+- 前置核实：Phase 1-4 全闭环（#1-#43 全 closed，main 与 origin 同步于 1e27f61）；新 PAT 验证可用（gh 已缺失改用 REST/GraphQL 直调）
+- 建任务：5 批检查 issue（#44-#48）+ 效果扩展 issue（#49）全部加入 Project v2；过程 bug 独立建档（#50-#56）
+- 批次 1（引擎层，#44）：实证排除 WebkitBackdropFilter 别名覆盖假说（Chromium 双属性独立，url() 折射实测生效）；发现并修复 #50——颜色 alpha 合成三处实现错误（4/8 位 hex 错位取色、rgb()/hsl() 丢 tintOpacity），新建 lib/glass/color.ts 共享 withAlpha（3/6 位精确 rgba 快路径 + color-mix 组合）与 isDarkColor（canvas 参考解析）；分享链接注入 #11223344@0.8 端到端渲染 color(srgb 0.067 0.133 0.2 / 0.213) 逐字节正确（提交 363a2d6）
+- 批次 2（API/数据层，#45）：发现并修复 #51——GET /api/presets/[id] 缺可见性校验（匿名读私有预设 200 全量泄漏→镜像 DELETE/PATCH 归属检查 403，实测修复前后 + 9 例 curl 回归全过）（提交 509fca7）；CI 首跑遇 bun tarball 抽取瞬时网络故障，重跑绿
+- 批次 3（认证层，#46）：修复 #52 注册 TOCTOU（并发同邮箱 P2002→500，改 409 镜像预检文案）+ #53 DEV_SECRET 回退补承诺的 console.warn（提交 b048b37）；scrypt/timingSafeEqual/email 规范化链/stale JWT 全量核验无罪
+- 批次 4（导出/封面上传链，#47）：修复 #54 configToReact 裸模板字面量注入（分享载荷反引号/${ 损坏导出产物→JSON.stringify 字面量，bun 实测恶意 tint 可编译且逐字节保真）（提交 31ff603）；cover.ts 资源/方向/同源、魔数嗅探、base64url 往返、hash 深载入、ObjectURL 零使用全过
+- 批次 5（交互层，#48）：修复 #55 载入参数按钮缺 setActivePreset('')+darkContent 重算（高亮/内容色错位，浏览器实测 chip true→false）+ #56 fetchSaved 响应序竞态（savedFetchSeq 代际守卫）（提交 40292c3）；撤销栈/对比/收藏/生成器/demo-card 水合防护全量核验
+- #49 效果扩展（提交 4fbbabe）：GlassConfig 新增 frost（feTurbulence 白噪磨砂层）/ edgeBlur（蒙版环 backdrop-blur 边缘高斯弥散）/ vignette（径向暗角）三参数（默认 0 向后兼容）；全链路打通 zod default、PARAM_ROWS+RANDOM_RANGES（随机/变体联动）、CSS 导出（frost data-URI SVG ::after + vignette inset shadow）、封面暗角近似、样式库 24→26（磨砂蚀刻/景深透镜）、decodeConfig 数值强转、Header/Footer 第五阶段文案
+- 实施中修正自身两次笔误：frostLayer 模板插值位置（提前闭合反引号致级联语法错）、测试载荷缺外层包装误判 API 回归失败——均即查即改
+- 验证：五批 + 功能共 6 次提交全部 CI 绿（37943442089/37944174945-rerun/37945062878/37945863951/37946802769/37948835285）；浏览器 E2E 双端（390px 零溢出、footer 推底、0 console error）；curl/幂等/边界套件全过；测试账号与探针行已全部级联清理
+- GitHub 产物：issues #44-#56 全闭环（报告回帖）、Project 条目全 Done、repo 推进至 4fbbabe
+
+Stage Summary:
+- 第五阶段全闭环：五批深度检查（覆盖 Phase 2-4 新增约 4200 行）+ 高斯模糊等三新效果
+- 检查总收成：6 个真实缺陷（1 渲染/1 隐私/1 竞态/1 注入/2 交互）全部修复，每项均有修复前后实测对照；实证无罪释放一批疑点（别名覆盖/位移贴图数学/RANDOM_RANGES 一致性/魔数嗅探/ObjectURL）
+- 关键决策：颜色组合以 color-mix 为兜底（4/8 位 hex 保留源 alpha 语义）；GET 单条可见性镜像写端点口径（403 而非 404 防枚举歧义）；导出 React 的 css 用 JSON 字符串字面量（正确性优先于可读性）；新效果默认 0 + zod default 双保险兼容存量
+- 沉淀陷阱：CSSOM 读回 url() 带引号（'#id'→url("#id")），DOM 断言 needle 需匹配归一化形式；python heredoc 内 shell 反引号插值是模板字面量补丁的高发事故点——用 repr 逐行核对；bash 后台分组 (&) 会隔离变量赋值
+- Project 44-49 全 Done；下轮候选：多用户协同/更多纹理层/导出含 edgeBlur 的 CSS 方案
