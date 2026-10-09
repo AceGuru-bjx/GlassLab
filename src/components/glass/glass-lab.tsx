@@ -1,19 +1,31 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Backpack,
+  Check,
+  Copy,
   Import,
   Loader2,
   MousePointer2,
   Palette,
   Save,
   Settings2,
+  Share2,
   Sparkles,
   Trash2,
 } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
+
+import {
+  configToCss,
+  configToReact,
+  configToJson,
+  decodeConfig,
+  hashPayload,
+  shareUrl,
+} from '@/lib/glass/export'
 
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
@@ -238,6 +250,135 @@ function CardShell({
   )
 }
 
+const EXPORT_FORMATS = [
+  { id: 'css', label: 'CSS', gen: configToCss },
+  { id: 'react', label: 'React', gen: configToReact },
+  { id: 'json', label: 'JSON', gen: configToJson },
+] as const
+
+type ExportFormatId = (typeof EXPORT_FORMATS)[number]['id']
+
+/** Phase 2 M2: code export + share-link panel. */
+function ExportPanel({ config }: { config: GlassConfig }) {
+  const [format, setFormat] = useState<ExportFormatId>('css')
+  const [copied, setCopied] = useState<string | null>(null)
+
+  const current = EXPORT_FORMATS.find(f => f.id === format) ?? EXPORT_FORMATS[0]
+  const code = useMemo(() => current.gen(config), [current, config])
+  const link = useMemo(() => shareUrl(config), [config])
+
+  const copyText = useCallback(
+    async (text: string, tag: string, label: string) => {
+      // navigator.clipboard needs a secure context + permission; fall back to
+      // the legacy execCommand path for restricted environments.
+      const ok = await (async () => {
+        try {
+          await navigator.clipboard.writeText(text)
+          return true
+        } catch {
+          try {
+            const ta = document.createElement('textarea')
+            ta.value = text
+            ta.style.position = 'fixed'
+            ta.style.opacity = '0'
+            document.body.appendChild(ta)
+            ta.select()
+            const done = document.execCommand('copy')
+            document.body.removeChild(ta)
+            return done
+          } catch {
+            return false
+          }
+        }
+      })()
+      if (ok) {
+        setCopied(tag)
+        toast({ title: '已复制到剪贴板', description: label })
+        setTimeout(() => setCopied(c => (c === tag ? null : c)), 1600)
+      } else {
+        toast({ title: '复制失败', description: '请手动选择文本复制', variant: 'destructive' })
+      }
+    },
+    []
+  )
+
+  return (
+    <div className="space-y-4" data-testid="export-panel">
+      <div className="flex gap-1.5" role="tablist" aria-label="导出格式">
+        {EXPORT_FORMATS.map(f => (
+          <button
+            key={f.id}
+            role="tab"
+            aria-selected={format === f.id}
+            onClick={() => setFormat(f.id)}
+            data-testid={`export-${f.id}`}
+            className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all ${
+              format === f.id
+                ? 'border-teal-500 bg-teal-500/10 text-teal-600'
+                : 'text-muted-foreground hover:border-teal-500/40 hover:text-foreground'
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      <pre
+        data-testid="export-code"
+        className="glass-scroll max-h-72 overflow-y-auto rounded-lg bg-muted/60 p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words"
+      >
+        {code}
+      </pre>
+
+      <Button
+        size="sm"
+        variant="outline"
+        className="w-full gap-1.5"
+        onClick={() => copyText(code, 'code', `${current.label} 代码`)}
+        data-testid="copy-code"
+      >
+        {copied === 'code' ? (
+          <Check className="h-3.5 w-3.5 text-teal-600" />
+        ) : (
+          <Copy className="h-3.5 w-3.5" />
+        )}
+        复制 {current.label} 代码
+      </Button>
+
+      <Separator />
+
+      <div>
+        <Label className="text-xs">分享链接</Label>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">
+          打开链接自动载入当前玻璃配置
+        </p>
+        <div className="mt-2 flex items-center gap-2">
+          <Input
+            readOnly
+            value={link}
+            aria-label="分享链接"
+            onFocus={e => e.currentTarget.select()}
+            className="h-9 font-mono text-[11px]"
+          />
+          <Button
+            size="sm"
+            className="h-9 shrink-0 gap-1 text-xs"
+            onClick={() => copyText(link, 'link', '分享链接')}
+            data-testid="copy-link"
+          >
+            {copied === 'link' ? (
+              <Check className="h-3.5 w-3.5" />
+            ) : (
+              <Share2 className="h-3.5 w-3.5" />
+            )}
+            复制
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function GlassLab() {
   const [config, setConfig] = useState<GlassConfig>(DEFAULT_CONFIG)
   const [activePreset, setActivePreset] = useState<string>('ios-clear')
@@ -281,6 +422,25 @@ export function GlassLab() {
   useEffect(() => {
     fetchSaved()
   }, [fetchSaved])
+
+  // ---- share-link deep load (#g=<payload>) ----
+  // rAF-deferred: keeps the effect free of synchronous state writes.
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      const payload = hashPayload(window.location.hash)
+      if (!payload) return
+      const cfg = decodeConfig(payload)
+      if (!cfg) {
+        toast({ title: '分享链接无效', description: '已忽略' })
+        return
+      }
+      setConfig(cfg)
+      setActivePreset('')
+      setDarkContent(cfg.tintOpacity > 0.3 && isDarkTint(cfg.tint))
+      toast({ title: '已载入分享的玻璃配置' })
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [])
 
   const savePreset = useCallback(async () => {
     const name =
@@ -493,9 +653,12 @@ export function GlassLab() {
           <aside className="order-3 min-w-0">
             <CardShell icon={<Settings2 className="h-3.5 w-3.5" />} title="参数控制台">
               <Tabs defaultValue="params">
-                <TabsList className="mb-4 grid w-full grid-cols-2">
+                <TabsList className="mb-4 grid w-full grid-cols-3">
                   <TabsTrigger value="params" className="text-xs">
                     参数
+                  </TabsTrigger>
+                  <TabsTrigger value="export" className="text-xs">
+                    导出
                   </TabsTrigger>
                   <TabsTrigger value="saved" className="text-xs">
                     我的预设
@@ -533,6 +696,9 @@ export function GlassLab() {
                       保存
                     </Button>
                   </div>
+                </TabsContent>
+                <TabsContent value="export">
+                  <ExportPanel config={config} />
                 </TabsContent>
                 <TabsContent value="saved">
                   <div className="max-h-96 space-y-2 overflow-y-auto pr-1 glass-scroll">
@@ -632,7 +798,7 @@ export function GlassLab() {
             </a>{' '}
             (Apache-2.0)
           </span>
-          <span>第二阶段功能增强 · M1 样式库与引擎升级（24 款 · 光源角度）</span>
+          <span>第二阶段功能增强 · M2 导出与分享（CSS / React / JSON / 链接）</span>
         </div>
       </footer>
     </div>
