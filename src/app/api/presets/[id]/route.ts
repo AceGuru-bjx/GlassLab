@@ -91,6 +91,7 @@ export async function GET(
       id: row.id,
       name: row.name,
       config: parsed.ok ? parsed.value : null,
+      cover: row.cover,
       corrupt: !parsed.ok,
       createdAt: row.createdAt.toISOString(),
     })

@@ -7,6 +7,9 @@ import {
   Backpack,
   Check,
   Copy,
+  GitCompare,
+  GripHorizontal,
+  GripVertical,
   Import,
   Loader2,
   LogIn,
@@ -18,10 +21,13 @@ import {
   Share2,
   Sparkles,
   Trash2,
+  Upload,
+  X,
 } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 
 import { AuthDialog } from '@/components/glass/auth-dialog'
+import { generateGlassCover, type CoverBackgroundSpec } from '@/lib/glass/cover'
 
 import {
   configToCss,
@@ -39,6 +45,15 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { GlassDemoCard, GlassPill } from '@/components/glass/glass-demo-card'
 import {
   CATEGORIES,
@@ -60,12 +75,17 @@ interface BackgroundOption {
   url?: string
   /** css background for the thumbnail */
   thumb: string
+  /** custom upload (deletable, owned via /api/backgrounds) */
+  custom?: boolean
+  /** canvas gradient colors for cover snapshots of css-gradient stages */
+  coverGradient?: { colors: string[]; angle: number }
 }
 
 interface SavedPreset {
   id: string
   name: string
   config: GlassConfig
+  cover?: string | null
   createdAt: string
 }
 
@@ -76,6 +96,10 @@ const BACKGROUNDS: BackgroundOption[] = [
     css: 'radial-gradient(at 20% 30%, #fda4af 0px, transparent 55%), radial-gradient(at 80% 20%, #67e8f9 0px, transparent 50%), radial-gradient(at 70% 80%, #fdba74 0px, transparent 50%), radial-gradient(at 15% 85%, #c4b5fd 0px, transparent 55%), linear-gradient(120deg, #f8fafc, #eef2ff)',
     thumb:
       'radial-gradient(at 20% 30%, #fda4af 0px, transparent 55%), radial-gradient(at 80% 20%, #67e8f9 0px, transparent 50%), linear-gradient(120deg,#f8fafc,#eef2ff)',
+    coverGradient: {
+      colors: ['#fda4af', '#67e8f9', '#fdba74', '#c4b5fd'],
+      angle: 120,
+    },
   },
   {
     id: 'aurora',
@@ -111,6 +135,7 @@ const BACKGROUNDS: BackgroundOption[] = [
     dark: true,
     css: 'radial-gradient(at 30% 20%, #1e3a5f 0px, transparent 60%), radial-gradient(at 75% 70%, #3b0764 0px, transparent 55%), linear-gradient(160deg, #020617, #0f172a)',
     thumb: 'linear-gradient(135deg,#0f172a,#1e3a5f,#3b0764)',
+    coverGradient: { colors: ['#1e3a5f', '#3b0764', '#020617'], angle: 160 },
   },
 ]
 
@@ -155,6 +180,17 @@ function isDarkTint(hex: string): boolean {
   const b = num & 255
   return (r * 299 + g * 587 + b * 114) / 1000 < 128
 }
+
+/** Map a stage background option to the canvas cover generator spec. */
+function coverSpec(b: BackgroundOption): CoverBackgroundSpec {
+  return {
+    imageUrl: b.url,
+    gradientColors: b.coverGradient?.colors,
+    gradientAngle: b.coverGradient?.angle,
+  }
+}
+
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 
 function ConfigPanel({
   config,
@@ -398,6 +434,18 @@ export function GlassLab() {
   const [authOpen, setAuthOpen] = useState(false)
   const { data: session, status: sessionStatus } = useSession()
 
+  // ---- Phase 3 M1: custom background uploads ----
+  const [customBgs, setCustomBgs] = useState<BackgroundOption[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [deletingBgId, setDeletingBgId] = useState<string | null>(null)
+
+  // ---- Phase 3 M3: A/B compare mode ----
+  const [compareOn, setCompareOn] = useState(false)
+  const [compareSplit, setCompareSplit] = useState(50)
+  const [compareTargetId, setCompareTargetId] = useState('style:vision-panel')
+  const [compareAxis, setCompareAxis] = useState<'x' | 'y'>('x')
+  const compareDraggingRef = useRef(false)
+
   const stageRef = useRef<HTMLDivElement>(null)
 
   const patch = useCallback((p: Partial<GlassConfig>) => {
@@ -434,6 +482,107 @@ export function GlassLab() {
     fetchSaved()
   }, [fetchSaved, sessionStatus])
 
+  // ---- custom backgrounds (API, Phase 3 M1) ----
+  const fetchCustomBgs = useCallback(async () => {
+    try {
+      const res = await fetch('/api/backgrounds')
+      if (!res.ok) return
+      const data = (await res.json()) as {
+        id: string
+        name: string
+        url: string
+      }[]
+      setCustomBgs(
+        data.map(r => ({
+          id: r.id,
+          name: r.name,
+          url: r.url,
+          custom: true,
+          thumb: `url(${r.url}) center / cover no-repeat`,
+        }))
+      )
+    } catch {
+      // Custom backgrounds are an enhancement — never block the lab.
+    }
+  }, [])
+
+  useEffect(() => {
+    if (sessionStatus === 'loading') return
+    fetchCustomBgs()
+  }, [fetchCustomBgs, sessionStatus])
+
+  const handleUploadBg = useCallback(
+    async (file: File) => {
+      if (file.size > MAX_UPLOAD_BYTES) {
+        toast({
+          title: '图片过大',
+          description: '最大 5MB，请压缩后重试',
+          variant: 'destructive',
+        })
+        return
+      }
+      setUploading(true)
+      try {
+        const fd = new FormData()
+        fd.append('file', file)
+        const res = await fetch('/api/backgrounds', {
+          method: 'POST',
+          body: fd,
+        })
+        if (!res.ok) {
+          let msg = '请重试'
+          if (res.status === 413) msg = '图片过大，最大 5MB'
+          else if (res.status === 400) {
+            try {
+              msg = (await res.json()).error ?? msg
+            } catch {}
+          }
+          throw new Error(msg)
+        }
+        const row = (await res.json()) as {
+          id: string
+          name: string
+          url: string
+        }
+        const opt: BackgroundOption = {
+          id: row.id,
+          name: row.name,
+          url: row.url,
+          custom: true,
+          thumb: `url(${row.url}) center / cover no-repeat`,
+        }
+        setCustomBgs(list => [opt, ...list])
+        setBg(opt)
+        toast({ title: '背景已上传', description: row.name })
+      } catch (e) {
+        toast({
+          title: '上传失败',
+          description: e instanceof Error ? e.message : '请重试',
+          variant: 'destructive',
+        })
+      } finally {
+        setUploading(false)
+      }
+    },
+    []
+  )
+
+  const handleDeleteBg = useCallback(async (id: string) => {
+    setDeletingBgId(id)
+    try {
+      const res = await fetch(`/api/backgrounds/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error()
+      setCustomBgs(list => list.filter(b => b.id !== id))
+      // If the deleted upload was on stage, fall back to the default bg.
+      setBg(cur => (cur.id === id ? BACKGROUNDS[0] : cur))
+      toast({ title: '已删除自定义背景' })
+    } catch {
+      toast({ title: '删除失败', variant: 'destructive' })
+    } finally {
+      setDeletingBgId(null)
+    }
+  }, [])
+
   // ---- share-link deep load (#g=<payload>) ----
   // rAF-deferred: keeps the effect free of synchronous state writes.
   useEffect(() => {
@@ -459,10 +608,13 @@ export function GlassLab() {
       `我的玻璃 ${new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`
     setSaving(true)
     try {
+      // Phase 3 M2: snapshot a cover first — failure is non-fatal (null),
+      // the preset still saves with the gradient-swatch fallback.
+      const cover = await generateGlassCover(coverSpec(bg), config)
       const res = await fetch('/api/presets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, config }),
+        body: JSON.stringify({ name, config, cover }),
       })
       if (!res.ok) {
         throw new Error(res.status === 400 ? '名称或参数不合法' : '请检查网络后重试')
@@ -478,7 +630,7 @@ export function GlassLab() {
     } finally {
       setSaving(false)
     }
-  }, [config, presetName, fetchSaved])
+  }, [config, presetName, fetchSaved, bg])
 
   const deletePreset = useCallback(
     async (id: string) => {
@@ -496,6 +648,96 @@ export function GlassLab() {
     },
     []
   )
+
+  // ---- Phase 3 M3: compare mode helpers ----
+  // Narrow viewports split the stage top/bottom so the 320px demo card fits;
+  // wide viewports split left/right. rAF deferral keeps lint's
+  // set-state-in-effect rule happy, mirroring the share-link effect below.
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)')
+    const raf = requestAnimationFrame(() => setCompareAxis(mq.matches ? 'y' : 'x'))
+    const onChange = (e: MediaQueryListEvent) =>
+      setCompareAxis(e.matches ? 'y' : 'x')
+    mq.addEventListener('change', onChange)
+    return () => {
+      cancelAnimationFrame(raf)
+      mq.removeEventListener('change', onChange)
+    }
+  }, [])
+
+  const compareB = useMemo<{ name: string; config: GlassConfig }>(() => {
+    const sep = compareTargetId.indexOf(':')
+    const kind = compareTargetId.slice(0, sep)
+    const id = compareTargetId.slice(sep + 1)
+    if (kind === 'saved') {
+      const s = saved.find(p => p.id === id)
+      if (s) return { name: s.name, config: { ...DEFAULT_CONFIG, ...s.config } }
+    } else if (kind === 'style') {
+      const p = PRESETS.find(x => x.id === id)
+      if (p) return { name: p.name, config: { ...DEFAULT_CONFIG, ...p.config } }
+    }
+    // Target disappeared (deleted preset, stale id) → fall back gracefully.
+    return { name: PRESETS[0].name, config: { ...DEFAULT_CONFIG, ...PRESETS[0].config } }
+  }, [compareTargetId, saved])
+
+  const onDividerPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    compareDraggingRef.current = true
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }, [])
+
+  const onDividerPointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!compareDraggingRef.current) return
+      const el = stageRef.current
+      if (!el) return
+      const rect = el.getBoundingClientRect()
+      const pct =
+        compareAxis === 'x'
+          ? ((e.clientX - rect.left) / rect.width) * 100
+          : ((e.clientY - rect.top) / rect.height) * 100
+      setCompareSplit(Math.min(95, Math.max(5, pct)))
+    },
+    [compareAxis]
+  )
+
+  const onDividerDragEnd = useCallback(() => {
+    compareDraggingRef.current = false
+  }, [])
+
+  const onDividerKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const step = e.shiftKey ? 10 : 2
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+      e.preventDefault()
+      setCompareSplit(s => Math.max(5, s - step))
+    } else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      setCompareSplit(s => Math.min(95, s + step))
+    } else if (e.key === 'Home') {
+      e.preventDefault()
+      setCompareSplit(5)
+    } else if (e.key === 'End') {
+      e.preventDefault()
+      setCompareSplit(95)
+    }
+  }, [])
+
+  const clipA =
+    compareAxis === 'x'
+      ? `inset(0 ${100 - compareSplit}% 0 0)`
+      : `inset(0 0 ${100 - compareSplit}% 0)`
+  const clipB =
+    compareAxis === 'x'
+      ? `inset(0 0 0 ${compareSplit}%)`
+      : `inset(${compareSplit}% 0 0 0)`
+
+  const bgStyle: React.CSSProperties = bg.css
+    ? { background: bg.css }
+    : {
+        backgroundImage: `url(${bg.url})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -515,7 +757,7 @@ export function GlassLab() {
           </div>
           <div className="flex items-center gap-2">
             <span className="hidden rounded-full border border-teal-500/30 bg-teal-500/10 px-2.5 py-1 text-[10px] font-medium text-teal-600 sm:inline-block">
-              Phase 2 · 功能增强进行中
+              Phase 3 · 影像与对比增强进行中
             </span>
             {sessionStatus === 'loading' ? (
               <div className="h-8 w-20 animate-pulse rounded-lg bg-muted" aria-hidden />
@@ -627,77 +869,304 @@ export function GlassLab() {
             <CardShell
               icon={<MousePointer2 className="h-3.5 w-3.5" />}
               title="实验舞台"
-              hint="拖动玻璃卡片 · 缩略图切换背景"
+              hint="拖动卡片 · 缩略图切背景 · 对比模式 A/B"
               className="flex flex-col"
             >
-              {/* background switcher */}
-              <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
-                {BACKGROUNDS.map(b => (
-                  <button
-                    key={b.id}
-                    onClick={() => setBg(b)}
-                    data-active={bg.id === b.id}
-                    aria-label={`背景 ${b.name}`}
-                    title={b.name}
-                    className="h-9 w-14 shrink-0 rounded-lg border transition-all hover:scale-105 data-[active=true]:border-teal-500 data-[active=true]:ring-2 data-[active=true]:ring-teal-500/40"
-                    style={{ background: b.thumb }}
-                  />
-                ))}
+              {/* background switcher + upload + compare toggle */}
+              <div className="mb-3 flex items-center gap-2">
+                <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto pb-1">
+                  {BACKGROUNDS.map(b => (
+                    <button
+                      key={b.id}
+                      onClick={() => setBg(b)}
+                      data-active={bg.id === b.id}
+                      aria-label={`背景 ${b.name}`}
+                      title={b.name}
+                      className="h-9 w-14 shrink-0 rounded-lg border transition-all hover:scale-105 data-[active=true]:border-teal-500 data-[active=true]:ring-2 data-[active=true]:ring-teal-500/40"
+                      style={{ background: b.thumb }}
+                    />
+                  ))}
+                  {customBgs.map(b => (
+                    <div
+                      key={b.id}
+                      className="group relative h-9 w-14 shrink-0"
+                      data-testid="custom-bg-item"
+                    >
+                      <button
+                        onClick={() => setBg(b)}
+                        data-active={bg.id === b.id}
+                        aria-label={`背景 ${b.name}`}
+                        title={b.name}
+                        data-testid="custom-bg-thumb"
+                        className="h-9 w-14 rounded-lg border transition-all hover:scale-105 data-[active=true]:border-teal-500 data-[active=true]:ring-2 data-[active=true]:ring-teal-500/40"
+                        style={{ background: b.thumb }}
+                      />
+                      <button
+                        onClick={() => handleDeleteBg(b.id)}
+                        aria-label={`删除背景 ${b.name}`}
+                        data-testid="delete-custom-bg"
+                        disabled={deletingBgId === b.id}
+                        className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-black/55 text-white opacity-80 transition-colors hover:bg-destructive sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100"
+                      >
+                        {deletingBgId === b.id ? (
+                          <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                        ) : (
+                          <X className="h-2.5 w-2.5" aria-hidden />
+                        )}
+                      </button>
+                    </div>
+                  ))}
+                  <label
+                    className={`relative flex h-9 w-14 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-dashed transition-colors hover:border-teal-500/60 hover:bg-teal-500/5 ${
+                      uploading ? 'pointer-events-none opacity-60' : ''
+                    }`}
+                    title="上传自定义背景"
+                    data-testid="bg-upload-tile"
+                  >
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/gif"
+                      className="sr-only"
+                      aria-label="上传自定义背景图片"
+                      disabled={uploading}
+                      onChange={e => {
+                        const f = e.target.files?.[0]
+                        e.target.value = ''
+                        if (f) handleUploadBg(f)
+                      }}
+                    />
+                    {uploading ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-teal-600" />
+                    ) : (
+                      <Upload className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </label>
+                </div>
+                <Button
+                  variant={compareOn ? 'default' : 'outline'}
+                  size="sm"
+                  className="h-9 shrink-0 gap-1.5 px-2.5 text-xs"
+                  onClick={() => setCompareOn(v => !v)}
+                  aria-pressed={compareOn}
+                  data-testid="compare-toggle"
+                >
+                  <GitCompare className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">对比</span>
+                </Button>
               </div>
+
+              {/* compare mode target picker (Phase 3 M3) */}
+              {compareOn && (
+                <div
+                  className="mb-3 flex items-center gap-2 rounded-xl border bg-muted/40 px-2.5 py-1.5"
+                  data-testid="compare-bar"
+                >
+                  <span
+                    aria-hidden
+                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal-500/15 text-[10px] font-bold text-teal-600"
+                  >
+                    A
+                  </span>
+                  <span className="shrink-0 text-[11px] text-muted-foreground">当前配置</span>
+                  <GitCompare className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" aria-hidden />
+                  <span
+                    aria-hidden
+                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-violet-500/15 text-[10px] font-bold text-violet-600"
+                  >
+                    B
+                  </span>
+                  <Select value={compareTargetId} onValueChange={setCompareTargetId}>
+                    <SelectTrigger
+                      className="h-7 min-w-0 flex-1 border-0 bg-transparent text-[11px] shadow-none focus:ring-0"
+                      aria-label="对比目标"
+                      data-testid="compare-select"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectLabel className="text-[10px]">我的预设</SelectLabel>
+                        {saved.length === 0 ? (
+                          <p className="px-2 py-1 text-[10px] text-muted-foreground">（空）</p>
+                        ) : (
+                          saved.map(p => (
+                            <SelectItem
+                              key={`saved:${p.id}`}
+                              value={`saved:${p.id}`}
+                              className="text-xs"
+                            >
+                              {p.name}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectGroup>
+                      {CATEGORIES.map(cat => (
+                        <SelectGroup key={cat}>
+                          <SelectLabel className="text-[10px]">{cat}样式</SelectLabel>
+                          {PRESETS.filter(p => p.category === cat).map(p => (
+                            <SelectItem
+                              key={`style:${p.id}`}
+                              value={`style:${p.id}`}
+                              className="text-xs"
+                            >
+                              {p.name}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 shrink-0 px-2 text-[11px]"
+                    onClick={() => setCompareOn(false)}
+                    data-testid="compare-close"
+                  >
+                    关闭
+                  </Button>
+                </div>
+              )}
 
               {/* stage */}
               <div
                 ref={stageRef}
                 data-testid="glass-stage"
                 className="relative min-h-[560px] flex-1 overflow-hidden rounded-2xl border shadow-inner"
-                style={
-                  bg.css
-                    ? { background: bg.css }
-                    : {
-                        backgroundImage: `url(${bg.url})`,
-                        backgroundSize: 'cover',
-                        backgroundPosition: 'center',
-                      }
-                }
+                style={bgStyle}
               >
-                {/* draggable demo card — flex 居中，不依赖卡高硬编码 */}
-                <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
-                  <motion.div
-                    drag
-                    dragConstraints={stageRef}
-                    dragElastic={config.elasticity}
-                    dragMomentum={false}
-                    whileDrag={{ scale: 1.03 }}
-                    className="pointer-events-auto cursor-grab active:cursor-grabbing"
-                    data-testid="draggable-card"
-                  >
-                    <GlassDemoCard config={config} dark={darkContent || config.overLight} />
-                  </motion.div>
-                </div>
+                {compareOn ? (
+                  <>
+                    {/* A pane — current live config */}
+                    <div
+                      data-testid="compare-pane-a"
+                      className="absolute inset-0"
+                      style={{ ...bgStyle, clipPath: clipA }}
+                    >
+                      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                        <GlassDemoCard
+                          config={config}
+                          dark={darkContent || config.overLight}
+                        />
+                      </div>
+                      <div className="absolute left-3 top-3 rounded-md bg-black/45 px-2 py-1 text-[10px] font-medium text-white backdrop-blur-sm">
+                        A · 当前配置
+                      </div>
+                    </div>
 
-                {/* floating pills */}
-                <motion.div
-                  drag
-                  dragConstraints={stageRef}
-                  dragElastic={config.elasticity}
-                  className="absolute left-6 top-6 z-10 cursor-grab active:cursor-grabbing"
-                >
-                  <GlassPill config={config} label="液态玻璃 · live" dark={bg.dark} />
-                </motion.div>
-                <motion.div
-                  drag
-                  dragConstraints={stageRef}
-                  dragElastic={config.elasticity}
-                  className="absolute bottom-6 right-6 z-10 cursor-grab active:cursor-grabbing"
-                >
-                  <GlassPill config={config} label="拖我试试 ↕" dark={bg.dark} />
-                </motion.div>
+                    {/* B pane — compare target (independent bg copy: each
+                        pane's backdrop-filter samples only its own layer) */}
+                    <div
+                      data-testid="compare-pane-b"
+                      className="absolute inset-0"
+                      style={{ ...bgStyle, clipPath: clipB }}
+                    >
+                      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                        <GlassDemoCard
+                          config={compareB.config}
+                          dark={darkContent || compareB.config.overLight}
+                        />
+                      </div>
+                      <div
+                        className="absolute rounded-md bg-black/45 px-2 py-1 text-[10px] font-medium text-white backdrop-blur-sm"
+                        style={
+                          compareAxis === 'x'
+                            ? { right: 12, top: 12 }
+                            : { bottom: 12, right: 12 }
+                        }
+                      >
+                        B · {compareB.name}
+                      </div>
+                    </div>
 
-                {/* corner hint */}
-                <div className="absolute bottom-3 left-3 rounded-md bg-black/35 px-2 py-1 text-[10px] text-white backdrop-blur-sm">
-                  {bg.name} · 位移贴图 {config.refraction}px · 色散{' '}
-                  {Math.round(config.dispersion * 100)}%
-                </div>
+                    {/* draggable divider (pointer + keyboard, 5%..95%) */}
+                    <div
+                      role="slider"
+                      tabIndex={0}
+                      data-testid="compare-divider"
+                      aria-label="对比分割位置"
+                      aria-orientation={compareAxis === 'x' ? 'horizontal' : 'vertical'}
+                      aria-valuemin={5}
+                      aria-valuemax={95}
+                      aria-valuenow={Math.round(compareSplit)}
+                      onPointerDown={onDividerPointerDown}
+                      onPointerMove={onDividerPointerMove}
+                      onPointerUp={onDividerDragEnd}
+                      onPointerCancel={onDividerDragEnd}
+                      onKeyDown={onDividerKeyDown}
+                      className={`group absolute z-20 flex touch-none items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-teal-500 ${
+                        compareAxis === 'x'
+                          ? 'inset-y-0 w-10 -translate-x-1/2 cursor-col-resize'
+                          : 'inset-x-0 h-10 -translate-y-1/2 cursor-row-resize'
+                      }`}
+                      style={
+                        compareAxis === 'x'
+                          ? { left: `${compareSplit}%` }
+                          : { top: `${compareSplit}%` }
+                      }
+                    >
+                      <span
+                        aria-hidden
+                        className={
+                          compareAxis === 'x'
+                            ? 'h-full w-[2px] bg-white/70 shadow-[0_0_6px_rgba(0,0,0,0.35)]'
+                            : 'h-[2px] w-full bg-white/70 shadow-[0_0_6px_rgba(0,0,0,0.35)]'
+                        }
+                      />
+                      <span
+                        aria-hidden
+                        className="absolute flex h-9 w-9 items-center justify-center rounded-full bg-white text-slate-700 shadow-xl ring-1 ring-black/10 transition-transform group-active:scale-95"
+                      >
+                        {compareAxis === 'x' ? (
+                          <GripVertical className="h-4 w-4" />
+                        ) : (
+                          <GripHorizontal className="h-4 w-4" />
+                        )}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* draggable demo card — flex 居中，不依赖卡高硬编码 */}
+                    <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+                      <motion.div
+                        drag
+                        dragConstraints={stageRef}
+                        dragElastic={config.elasticity}
+                        dragMomentum={false}
+                        whileDrag={{ scale: 1.03 }}
+                        className="pointer-events-auto cursor-grab active:cursor-grabbing"
+                        data-testid="draggable-card"
+                      >
+                        <GlassDemoCard config={config} dark={darkContent || config.overLight} />
+                      </motion.div>
+                    </div>
+
+                    {/* floating pills */}
+                    <motion.div
+                      drag
+                      dragConstraints={stageRef}
+                      dragElastic={config.elasticity}
+                      className="absolute left-6 top-6 z-10 cursor-grab active:cursor-grabbing"
+                    >
+                      <GlassPill config={config} label="液态玻璃 · live" dark={bg.dark} />
+                    </motion.div>
+                    <motion.div
+                      drag
+                      dragConstraints={stageRef}
+                      dragElastic={config.elasticity}
+                      className="absolute bottom-6 right-6 z-10 cursor-grab active:cursor-grabbing"
+                    >
+                      <GlassPill config={config} label="拖我试试 ↕" dark={bg.dark} />
+                    </motion.div>
+
+                    {/* corner hint */}
+                    <div className="absolute bottom-3 left-3 max-w-[60%] truncate rounded-md bg-black/35 px-2 py-1 text-[10px] text-white backdrop-blur-sm">
+                      {bg.name} · 位移贴图 {config.refraction}px · 色散{' '}
+                      {Math.round(config.dispersion * 100)}%
+                    </div>
+                  </>
+                )}
               </div>
             </CardShell>
           </section>
@@ -783,13 +1252,23 @@ export function GlassLab() {
                             className="flex min-w-0 flex-1 items-center gap-2 text-left"
                             data-testid="apply-saved"
                           >
-                            <span
-                              className="h-8 w-8 shrink-0 rounded-lg"
-                              style={{
-                                background: `linear-gradient(135deg, ${p.config.tint}, ${p.config.glow !== 'transparent' ? p.config.glow : '#94a3b8'})`,
-                              }}
-                              aria-hidden
-                            />
+                            {p.cover ? (
+                              <img
+                                src={p.cover}
+                                alt={`预设封面：${p.name}`}
+                                className="h-8 w-10 shrink-0 rounded-lg border object-cover"
+                                loading="lazy"
+                                data-testid="preset-cover"
+                              />
+                            ) : (
+                              <span
+                                className="h-8 w-10 shrink-0 rounded-lg"
+                                style={{
+                                  background: `linear-gradient(135deg, ${p.config.tint}, ${p.config.glow !== 'transparent' ? p.config.glow : '#94a3b8'})`,
+                                }}
+                                aria-hidden
+                              />
+                            )}
                             <span className="min-w-0">
                               <span className="block truncate text-xs font-medium">{p.name}</span>
                               <span className="block text-[10px] text-muted-foreground">
@@ -853,7 +1332,7 @@ export function GlassLab() {
             </a>{' '}
             (Apache-2.0)
           </span>
-          <span>第二阶段功能增强 · M3 多用户预设（登录后私有 · 游客公共）</span>
+          <span>第三阶段功能增强 · 背景上传 / 预设封面 / A/B 对比（M1–M3）</span>
         </div>
       </footer>
     </div>

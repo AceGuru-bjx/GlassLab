@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
-import { getSessionOrNull } from '@/lib/session'
+import { getSessionUserIdOrNull } from '@/lib/session'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,10 +51,24 @@ const glassConfigSchema = z.object({
 const createPresetSchema = z.object({
   name: z.string().trim().min(1).max(48),
   config: glassConfigSchema,
+  // Phase 3 M2: client-generated cover snapshot (optional). Must be a base64
+  // image data URL — it flows into <img src>, so the whitelist is strict.
+  cover: z
+    .string()
+    .max(200_000)
+    .refine(v => COVER_DATA_URL_PATTERN.test(v), {
+      message: 'cover must be a base64 image data URL (png/jpeg/webp)',
+    })
+    .nullable()
+    .optional(),
 })
 
-/** Legit payloads are < 1KB; anything larger is rejected outright. */
-const MAX_BODY_BYTES = 10 * 1024
+/** Legit config-only payloads are < 1KB; a JPEG cover adds ~40KB.
+ *  The cap stays far below anything abusive while making room for covers. */
+const MAX_BODY_BYTES = 300 * 1024
+
+const COVER_DATA_URL_PATTERN =
+  /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/
 
 /**
  * Parse a stored config string defensively. Corrupted rows (disk damage,
@@ -75,8 +89,9 @@ function parseStoredConfig(raw: string): { ok: true; value: unknown } | { ok: fa
  */
 export async function GET() {
   try {
-    const session = await getSessionOrNull()
-    const userId = session?.user?.id
+    // Validated lookup: a stale JWT (deleted account) degrades to guest
+    // visibility instead of an empty private set.
+    const userId = await getSessionUserIdOrNull()
     const rows = await db.glassPreset.findMany({
       where: userId ? { userId } : { userId: null },
       orderBy: { createdAt: 'desc' },
@@ -95,6 +110,7 @@ export async function GET() {
         id: r.id,
         name: r.name,
         config: parsed.value,
+        cover: r.cover,
         createdAt: r.createdAt.toISOString(),
       })
     }
@@ -133,13 +149,16 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const session = await getSessionOrNull()
+    // Validated against the users table: a stale JWT (deleted account) must
+    // degrade to a public row, not blow up the INSERT with an FK violation.
+    const userId = await getSessionUserIdOrNull()
     const row = await db.glassPreset.create({
       data: {
         name: parsed.data.name,
         config: JSON.stringify(parsed.data.config),
+        cover: parsed.data.cover ?? null,
         // Signed-in → private preset owned by the user; guest → public.
-        userId: session?.user?.id ?? null,
+        userId,
       },
     })
 
@@ -148,6 +167,7 @@ export async function POST(req: NextRequest) {
         id: row.id,
         name: row.name,
         config: parsed.data.config,
+        cover: row.cover,
         createdAt: row.createdAt.toISOString(),
       },
       { status: 201 }

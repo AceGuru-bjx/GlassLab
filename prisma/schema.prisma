@@ -21,6 +21,7 @@ model User {
   passwordHash String?
   posts        Post[]
   presets      GlassPreset[]
+  backgrounds  BackgroundImage[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 }
@@ -46,11 +47,34 @@ model GlassPreset {
   name      String
   /// Full GlassConfig JSON (see src/lib/glass/presets.ts)
   config    String
+  /// Optional cover snapshot (data URL) generated client-side on save;
+  /// null for legacy rows → UI falls back to the tint gradient swatch.
+  cover     String?
   owner     User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([createdAt])
+  @@index([userId])
+}
+
+/// Custom stage backgrounds uploaded from the Glass Lab.
+/// Ownership mirrors GlassPreset: userId = null → public (guest upload,
+/// openly listable/deletable); userId set → owned by that user (private).
+model BackgroundImage {
+  id        String   @id @default(cuid())
+  name      String
+  /// Sniffed (not client-asserted) image mime type: image/png|jpeg|webp|gif
+  mimeType  String
+  /// Byte length of `data`, kept denormalized for list endpoints
+  size      Int
+  /// Raw image bytes (SQLite BLOB) — served via /api/backgrounds/[id]/raw
+  data      Bytes
+  owner     User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([userId])
 }
