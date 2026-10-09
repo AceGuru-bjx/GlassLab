@@ -176,6 +176,18 @@ export async function GET(
     if (!row) {
       return NextResponse.json({ error: 'Preset not found' }, { status: 404 })
     }
+    // Visibility check mirrors DELETE/PATCH: private presets (userId set) are
+    // only readable by their owner — the list endpoint already scopes by
+    // session, so a single-row read must not become a privacy bypass (#51).
+    if (row.userId) {
+      const session = await getSessionOrNull()
+      if (session?.user?.id !== row.userId) {
+        return NextResponse.json(
+          { error: '无权访问该预设' },
+          { status: 403 }
+        )
+      }
+    }
     const parsed = parseStoredConfig(row.config)
     return NextResponse.json({
       id: row.id,
