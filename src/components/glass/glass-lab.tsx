@@ -23,8 +23,10 @@ import {
   Sparkles,
   Star,
   Trash2,
+  Undo2,
   Upload,
   X,
+  Redo2,
 } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
@@ -204,11 +206,16 @@ function ConfigPanel({
   onChange,
   darkContent,
   onDarkContentChange,
+  onHistoryCheckpoint,
 }: {
   config: GlassConfig
   onChange: (patch: Partial<GlassConfig>) => void
   darkContent: boolean
   onDarkContentChange: (v: boolean) => void
+  /** Phase 4 M2: called when an interaction *begins* (slider grab, switch
+   *  flip) so the pre-interaction state lands on the undo stack exactly once
+   *  per gesture — continuous slider onChange must NOT push. */
+  onHistoryCheckpoint?: () => void
 }) {
   return (
     <div className="space-y-5" data-testid="config-panel">
@@ -226,6 +233,7 @@ function ConfigPanel({
             max={r.max}
             step={r.step}
             aria-label={r.label}
+            onPointerDown={onHistoryCheckpoint}
             onValueChange={([v]) => onChange({ [r.key]: v } as Partial<GlassConfig>)}
           />
         </div>
@@ -241,7 +249,10 @@ function ConfigPanel({
         <Switch
           checked={config.depthEffect}
           aria-label="深度形变"
-          onCheckedChange={v => onChange({ depthEffect: v })}
+          onCheckedChange={v => {
+            onHistoryCheckpoint?.()
+            onChange({ depthEffect: v })
+          }}
         />
       </div>
       <div className="flex items-center justify-between">
@@ -252,7 +263,10 @@ function ConfigPanel({
         <Switch
           checked={config.overLight}
           aria-label="深色玻璃"
-          onCheckedChange={v => onChange({ overLight: v })}
+          onCheckedChange={v => {
+            onHistoryCheckpoint?.()
+            onChange({ overLight: v })
+          }}
         />
       </div>
       <div className="flex items-center justify-between">
@@ -461,16 +475,109 @@ export function GlassLab() {
 
   const stageRef = useRef<HTMLDivElement>(null)
 
+  // ---- Phase 4 M2: undo/redo history ----
+  // Refs mirror the latest config/activePreset so checkpoints never read a
+  // stale closure; the stack itself lives in a ref (not state) to keep
+  // slider drags allocation-cheap, with a depth snapshot for the UI.
+  const HISTORY_LIMIT = 50
+  const configRef = useRef(config)
+  configRef.current = config
+  const activePresetRef = useRef(activePreset)
+  activePresetRef.current = activePreset
+  const historyRef = useRef<{ past: { config: GlassConfig; activePreset: string }[]; future: { config: GlassConfig; activePreset: string }[] }>({
+    past: [],
+    future: [],
+  })
+  const [historyDepth, setHistoryDepth] = useState({ undo: 0, redo: 0 })
+
+  const pushHistory = useCallback(() => {
+    const h = historyRef.current
+    const entry = {
+      config: { ...configRef.current },
+      activePreset: activePresetRef.current,
+    }
+    // Skip no-op checkpoints (e.g. a click that grabs but never drags).
+    const last = h.past[h.past.length - 1]
+    if (last && JSON.stringify(last) === JSON.stringify(entry)) return
+    h.past.push(entry)
+    if (h.past.length > HISTORY_LIMIT) h.past.shift()
+    // A new branch invalidates the redo tail.
+    h.future.length = 0
+    setHistoryDepth({ undo: h.past.length, redo: h.future.length })
+  }, [])
+
+  const restoreEntry = useCallback((entry: { config: GlassConfig; activePreset: string }) => {
+    setConfig(entry.config)
+    setActivePreset(entry.activePreset)
+    setDarkContent(
+      entry.config.tintOpacity > 0.3 && isDarkTint(entry.config.tint)
+    )
+  }, [])
+
+  const undo = useCallback(() => {
+    const h = historyRef.current
+    const prev = h.past.pop()
+    if (!prev) return
+    h.future.push({
+      config: { ...configRef.current },
+      activePreset: activePresetRef.current,
+    })
+    restoreEntry(prev)
+    setHistoryDepth({ undo: h.past.length, redo: h.future.length })
+  }, [restoreEntry])
+
+  const redo = useCallback(() => {
+    const h = historyRef.current
+    const next = h.future.pop()
+    if (!next) return
+    h.past.push({
+      config: { ...configRef.current },
+      activePreset: activePresetRef.current,
+    })
+    restoreEntry(next)
+    setHistoryDepth({ undo: h.past.length, redo: h.future.length })
+  }, [restoreEntry])
+
+  // Keyboard shortcuts: Ctrl/Cmd+Z undo, Ctrl+Shift+Z / Ctrl+Y redo.
+  // Skipped while typing (native text editing owns those keys) and while
+  // compare mode is on — compare panes hold their own configs, not the stack.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (compareOn) return
+      const t = e.target as HTMLElement | null
+      if (
+        t &&
+        (t.tagName === 'INPUT' ||
+          t.tagName === 'TEXTAREA' ||
+          t.isContentEditable)
+      )
+        return
+      if (!(e.metaKey || e.ctrlKey)) return
+      const key = e.key.toLowerCase()
+      if (key === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) redo()
+        else undo()
+      } else if (key === 'y') {
+        e.preventDefault()
+        redo()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [compareOn, undo, redo])
+
   const patch = useCallback((p: Partial<GlassConfig>) => {
     setConfig(c => ({ ...c, ...p }))
     setActivePreset('')
   }, [])
 
   const applyPreset = useCallback((p: GlassPreset) => {
+    pushHistory()
     setConfig({ ...p.config })
     setActivePreset(p.id)
     setDarkContent(p.config.tintOpacity > 0.3 && isDarkTint(p.config.tint))
-  }, [])
+  }, [pushHistory])
 
   // ---- saved presets (API) ----
   const fetchSaved = useCallback(async () => {
@@ -665,13 +772,16 @@ export function GlassLab() {
         toast({ title: '分享链接无效', description: '已忽略' })
         return
       }
+      pushHistory()
       setConfig(cfg)
       setActivePreset('')
       setDarkContent(cfg.tintOpacity > 0.3 && isDarkTint(cfg.tint))
       toast({ title: '已载入分享的玻璃配置' })
     })
     return () => cancelAnimationFrame(raf)
-  }, [])
+    // pushHistory is a stable []-dependency callback — declaring it is
+    // unnecessary and exhaustive-deps stays silent.
+  }, [pushHistory])
 
   const savePreset = useCallback(async () => {
     const name =
@@ -1246,6 +1356,43 @@ export function GlassLab() {
           {/* ---------- Right: controls + saved ---------- */}
           <aside className="order-3 min-w-0">
             <CardShell icon={<Settings2 className="h-3.5 w-3.5" />} title="参数控制台">
+              {/* Phase 4 M2: undo/redo toolbar */}
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-0.5">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    aria-label="撤销"
+                    title="撤销 (Ctrl+Z)"
+                    data-testid="undo-btn"
+                    disabled={historyDepth.undo === 0 || compareOn}
+                    onClick={undo}
+                  >
+                    <Undo2 className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    aria-label="重做"
+                    title="重做 (Ctrl+Shift+Z)"
+                    data-testid="redo-btn"
+                    disabled={historyDepth.redo === 0 || compareOn}
+                    onClick={redo}
+                  >
+                    <Redo2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                {historyDepth.undo > 0 && (
+                  <span
+                    className="text-[10px] tabular-nums text-muted-foreground"
+                    data-testid="history-depth"
+                  >
+                    可撤销 {historyDepth.undo} 步
+                  </span>
+                )}
+              </div>
               <Tabs defaultValue="params">
                 <TabsList className="mb-4 grid w-full grid-cols-3">
                   <TabsTrigger value="params" className="text-xs">
@@ -1264,6 +1411,7 @@ export function GlassLab() {
                     onChange={patch}
                     darkContent={darkContent}
                     onDarkContentChange={setDarkContent}
+                    onHistoryCheckpoint={pushHistory}
                   />
                   <Separator className="my-4" />
                   <div className="flex items-center gap-2">
@@ -1349,6 +1497,7 @@ export function GlassLab() {
                         >
                           <button
                             onClick={() => {
+                              pushHistory()
                               setConfig({ ...DEFAULT_CONFIG, ...p.config })
                               setActivePreset('')
                               setDarkContent(
@@ -1414,6 +1563,7 @@ export function GlassLab() {
                             aria-label={`载入参数 ${p.name}`}
                             title="载入参数"
                             onClick={() => {
+                              pushHistory()
                               setConfig({ ...DEFAULT_CONFIG, ...p.config })
                               toast({ title: '已载入参数', description: p.name })
                             }}
