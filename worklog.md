@@ -118,3 +118,23 @@ Stage Summary:
 - 资源层结论：壁纸 568K/4 张体量健康、无死资产、robots 合法、generated 文件未跟踪
 - 第一阶段 5/5 全部闭环：25 缺陷（4+8+6+7+4）全流程关闭，Project 5 条目全 Done，CI 四阶段全绿，产物经裸环境验证可启动
 - GitHub 产物：repo 14 commits、issues #1–#34 全闭环、README 就位
+
+---
+Task ID: 6
+Agent: Z.ai Code (main agent)
+Task: 第二阶段功能增强：M1 引擎+样式库扩展 / M2 导出与分享 / M3 NextAuth 多用户预设（issues #35-#37）
+
+Work Log:
+- 建第二阶段 3 个功能 issue（#35/#36/#37）并全部加入 Project v2
+- M1（8e93f5f，CI 绿）：GlassConfig 新增 lightAngle（0-360 默认 45），LiquidGlass rim 高光方向实时联动（overLight +90°），不触发位移贴图重绘；样式库 12→24 款四大分类（经典/材质/光影/创意）+ 筛选 chips + 动态计数；API zod lightAngle default(45) 向后兼容（旧载荷 201 补齐、越界 400、存量行不腐化）；顺带修复 radix Slider aria-label 落 Root 不落 Thumb 的 a11y 缺陷（9/9 滑杆获得可访问名称）；Header/Footer 切 Phase 2 文案
+- M2（cd49534，CI 绿）：src/lib/glass/export.ts（CSS/自包含 React/JSON 生成器 + unicode 安全 base64url 编解码）；右栏新增「导出」页（格式切换+滚动预览+一键复制+toast）；分享链接 #g=<payload> 挂载深度载入（rAF 防护 set-state-in-effect），坏 payload 静默忽略+toast；复制链路 clipboard API 失败回退 execCommand（无头环境实测从失败→成功）；hash 仅变化不重载页面属 SPA 预期行为（实测确认）
+- M3（092cb35 安全修复 + ff481f6 功能，CI 绿）：next-auth v4.24.15 + Next 16 无 peer 冲突；JWT session + Credentials（scrypt 加盐 + timingSafeEqual）；/api/auth/register（zod、409/400）；Schema：User.passwordHash? + GlassPreset.owner?（级联+索引），存量行=公共预设；GET 按会话过滤（登录=私有/游客=公共）、POST 挂 userId、DELETE 他人 403/公共开放；Header 登录 Dialog（登录/注册切换+内联错误）+ 用户徽章 + 登出；getSessionOrNull() 认证故障降级游客（保裸环境 smoke 绿），CI smoke 加 NEXTAUTH_SECRET
+- M3 实施中发现并修复：①[安全回归] .env 被 add -A 重新跟踪（#9 回归），NEXTAUTH_SECRET 一度险些入史——092cb35 解除跟踪 163 文件（.env/.next/dev.log/db/.zscripts）+ 重写 .gitignore（原仅 2 行），历史确认无泄密；②登录/登出后预设列表不刷新 → effect 改依赖 sessionStatus 即时重拉
+- 验证：lint+tsc 全绿；curl 12 例认证/归属全通（201/409/400/302/拒绝/隔离/403/200）；浏览器端到端（注册→徽章→保存→归属→登出→列表切换→重登录恢复）；24 款预设分类筛选、水滴透镜/落日辉光渲染、lightAngle 滑杆联动（thumb=80°→rim=80°）、分享链接 349 字符还原一致、#g=AAAA 容错；1440/390 双端无溢出、控制台 0 error；测试账号已级联清理
+- 三个 issue 全部报告回帖并关闭，Project 条目 #35/#36/#37 置 Done
+
+Stage Summary:
+- 第二阶段三里程碑全部闭环：引擎增强+24 款样式库 / 导出分享系统 / NextAuth 多用户预设
+- 关键决策：多页扩展以页内 Tabs 实现（沙箱仅暴露 / 路由）；next-auth v4 经实测与 Next 16 兼容无需降级方案；公共预设保持游客可删（延续坏行清理能力）；认证故障一律降级不炸端点
+- 沉淀陷阱：radix Slider 可访问名在 Thumb 上；受控 Input 的测试填充需原生 setter；MultiEdit 工具失败会留下部分已应用编辑（需核对）；运行中 dev server 持有旧 Prisma Client，schema 变更后必须重启；哈希路由变化不触发 React 挂载 effect
+- GitHub 产物：repo 20 commits（CI 全绿）、issues #35-#37 闭环、Project 第二阶段 3 条目全 Done
