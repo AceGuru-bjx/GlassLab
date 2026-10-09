@@ -671,7 +671,12 @@ export function GlassLab() {
   }, [pushHistory])
 
   // ---- saved presets (API) ----
+  // Response-order guard (#56): only the newest request may land state —
+  // a slower in-flight response from a previous sort/search must not
+  // overwrite the list the user is currently looking at.
+  const savedFetchSeq = useRef(0)
   const fetchSaved = useCallback(async () => {
+    const seq = ++savedFetchSeq.current
     try {
       setLoadingSaved(true)
       const params = new URLSearchParams()
@@ -685,12 +690,14 @@ export function GlassLab() {
         total: number
         limit: number
       }
+      if (seq !== savedFetchSeq.current) return
       setSaved(data.presets)
       setTotalSaved(data.total)
     } catch {
-      toast({ title: '预设加载失败', description: '请稍后重试' })
+      if (seq === savedFetchSeq.current)
+        toast({ title: '预设加载失败', description: '请稍后重试' })
     } finally {
-      setLoadingSaved(false)
+      if (seq === savedFetchSeq.current) setLoadingSaved(false)
     }
   }, [debouncedQuery, sortMode])
 
@@ -1686,6 +1693,13 @@ export function GlassLab() {
                             onClick={() => {
                               pushHistory()
                               setConfig({ ...DEFAULT_CONFIG, ...p.config })
+                              // Mirror the row's main entry point (#55):
+                              // clear the active chip and recompute the
+                              // content color for the loaded tint.
+                              setActivePreset('')
+                              setDarkContent(
+                                p.config.tintOpacity > 0.3 && isDarkColor(p.config.tint)
+                              )
                               toast({ title: '已载入参数', description: p.name })
                             }}
                           >
