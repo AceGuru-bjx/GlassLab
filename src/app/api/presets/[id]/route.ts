@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
+import { z } from 'zod'
 import { db } from '@/lib/db'
 import { getSessionOrNull } from '@/lib/session'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * Phase 4 M1: favorite toggle payload. Single boolean — anything else is a
+ * client bug and gets 400.
+ */
+const patchSchema = z.object({ favorite: z.boolean() })
+
+/** The legit payload is ~20 bytes; anything bigger is abusive. */
+const MAX_PATCH_BODY_BYTES = 1024
 
 /**
  * Parse a stored config string defensively. Corrupted rows (disk damage,
@@ -70,6 +80,86 @@ export async function DELETE(
     console.error('[api/presets/[id]] DELETE failed:', error)
     return NextResponse.json(
       { error: 'Failed to delete preset' },
+      { status: 500 }
+    )
+  }
+}
+
+/**
+ * PATCH /api/presets/[id] — toggle the favorite flag (Phase 4 M1).
+ * Ownership rules mirror DELETE: private presets only toggleable by their
+ * owner (403 otherwise); public presets stay openly toggleable, consistent
+ * with the guest-deletion capability.
+ */
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+    if (!id || id.length < 8 || id.length > 64) {
+      return NextResponse.json({ error: 'Invalid preset id' }, { status: 400 })
+    }
+
+    const len = Number(req.headers.get('content-length') ?? '0')
+    if (Number.isFinite(len) && len > MAX_PATCH_BODY_BYTES) {
+      return NextResponse.json({ error: 'Payload too large' }, { status: 413 })
+    }
+
+    // Client payload errors are 4xx, not server faults.
+    let body: unknown
+    try {
+      body = await req.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+
+    const parsed = patchSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid payload', issues: parsed.error.flatten() },
+        { status: 400 }
+      )
+    }
+
+    const existing = await db.glassPreset.findUnique({
+      where: { id },
+      select: { id: true, userId: true },
+    })
+    if (!existing) {
+      return NextResponse.json({ error: 'Preset not found' }, { status: 404 })
+    }
+
+    if (existing.userId) {
+      const session = await getSessionOrNull()
+      if (session?.user?.id !== existing.userId) {
+        return NextResponse.json(
+          { error: '无权修改他人预设' },
+          { status: 403 }
+        )
+      }
+    }
+
+    try {
+      const row = await db.glassPreset.update({
+        where: { id },
+        data: { favorite: parsed.data.favorite },
+      })
+      return NextResponse.json({ ok: true, id, favorite: row.favorite })
+    } catch (error) {
+      // Concurrent delete won the race — nothing left to favorite (P2025).
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2025'
+      ) {
+        return NextResponse.json({ error: 'Preset not found' }, { status: 404 })
+      }
+      throw error
+    }
+  } catch (error) {
+    console.error('[api/presets/[id]] PATCH failed:', error)
+    return NextResponse.json(
+      { error: 'Failed to update preset' },
       { status: 500 }
     )
   }

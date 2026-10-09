@@ -50,6 +50,9 @@ model GlassPreset {
   /// Optional cover snapshot (data URL) generated client-side on save;
   /// null for legacy rows → UI falls back to the tint gradient swatch.
   cover     String?
+  /// Starred by the viewer. Public presets can be favorited by anyone
+  /// (mirrors the open-delete rule); private ones only by their owner.
+  favorite  Boolean  @default(false)
   owner     User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    String?
   createdAt DateTime @default(now())

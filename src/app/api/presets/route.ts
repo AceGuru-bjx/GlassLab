@@ -71,6 +71,26 @@ const COVER_DATA_URL_PATTERN =
   /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/
 
 /**
+ * Phase 4 M1: list cap stays as a guard rail, but it is no longer silent —
+ * the response carries `total` so clients can surface truncation.
+ */
+const PRESET_LIST_LIMIT = 100
+
+/**
+ * GET query params (Phase 4 M1). `q` filters by name substring; empty/absent
+ * q means "no filter" rather than an error. Unknown `sort` values are 400.
+ */
+const listQuerySchema = z.object({
+  q: z
+    .string()
+    .trim()
+    .max(48)
+    .optional()
+    .transform(v => (v && v.length > 0 ? v : undefined)),
+  sort: z.enum(['recent', 'name', 'favorites']).default('recent'),
+})
+
+/**
  * Parse a stored config string defensively. Corrupted rows (disk damage,
  * manual edits, historic bugs) must never take the whole endpoint down.
  */
@@ -83,20 +103,49 @@ function parseStoredConfig(raw: string): { ok: true; value: unknown } | { ok: fa
 }
 
 /**
- * GET /api/presets — list presets visible to the caller (newest first).
- * Signed-in users see their own presets; guests see public presets
- * (userId = null, i.e. saved without an account).
+ * GET /api/presets — list presets visible to the caller with search, sort and
+ * a total count. Signed-in users see their own presets; guests see public
+ * presets (userId = null, i.e. saved without an account).
+ *
+ * Response: { presets, total, limit } — `total` counts all matching rows in
+ * the database, so clients can detect both take-limit truncation and rows
+ * skipped due to corrupted config payloads.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const { searchParams } = new URL(req.url)
+    const parsedQ = listQuerySchema.safeParse({
+      q: searchParams.get('q') ?? undefined,
+      sort: searchParams.get('sort') ?? undefined,
+    })
+    if (!parsedQ.success) {
+      return NextResponse.json(
+        { error: 'Invalid query parameters', issues: parsedQ.error.flatten() },
+        { status: 400 }
+      )
+    }
+    const { q, sort } = parsedQ.data
+
     // Validated lookup: a stale JWT (deleted account) degrades to guest
     // visibility instead of an empty private set.
     const userId = await getSessionUserIdOrNull()
-    const rows = await db.glassPreset.findMany({
-      where: userId ? { userId } : { userId: null },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-    })
+    const where = {
+      ...(userId ? { userId } : { userId: null }),
+      // SQLite `contains` is a substring match (case-insensitive for ASCII).
+      ...(q ? { name: { contains: q } } : {}),
+    }
+    const orderBy =
+      sort === 'name'
+        ? ({ name: 'asc' } as const)
+        : sort === 'favorites'
+          ? [{ favorite: 'desc' }, { createdAt: 'desc' }]
+          : { createdAt: 'desc' }
+
+    const [rows, total] = await Promise.all([
+      db.glassPreset.findMany({ where, orderBy, take: PRESET_LIST_LIMIT }),
+      db.glassPreset.count({ where }),
+    ])
+
     const presets = []
     for (const r of rows) {
       const parsed = parseStoredConfig(r.config)
@@ -111,10 +160,11 @@ export async function GET() {
         name: r.name,
         config: parsed.value,
         cover: r.cover,
+        favorite: r.favorite,
         createdAt: r.createdAt.toISOString(),
       })
     }
-    return NextResponse.json(presets)
+    return NextResponse.json({ presets, total, limit: PRESET_LIST_LIMIT })
   } catch (error) {
     console.error('[api/presets] GET failed:', error)
     return NextResponse.json(
@@ -168,6 +218,7 @@ export async function POST(req: NextRequest) {
         name: row.name,
         config: parsed.data.config,
         cover: row.cover,
+        favorite: row.favorite,
         createdAt: row.createdAt.toISOString(),
       },
       { status: 201 }

@@ -17,14 +17,17 @@ import {
   MousePointer2,
   Palette,
   Save,
+  Search,
   Settings2,
   Share2,
   Sparkles,
+  Star,
   Trash2,
   Upload,
   X,
 } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
+import { cn } from '@/lib/utils'
 
 import { AuthDialog } from '@/components/glass/auth-dialog'
 import { generateGlassCover, type CoverBackgroundSpec } from '@/lib/glass/cover'
@@ -86,8 +89,12 @@ interface SavedPreset {
   name: string
   config: GlassConfig
   cover?: string | null
+  favorite: boolean
   createdAt: string
 }
+
+/** Phase 4 M1: server-side sort orders understood by GET /api/presets. */
+type PresetSort = 'recent' | 'name' | 'favorites'
 
 const BACKGROUNDS: BackgroundOption[] = [
   {
@@ -431,6 +438,12 @@ export function GlassLab() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [saved, setSaved] = useState<SavedPreset[]>([])
   const [loadingSaved, setLoadingSaved] = useState(true)
+  // ---- Phase 4 M1: favorite / search / sort ----
+  const [presetQuery, setPresetQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
+  const [sortMode, setSortMode] = useState<PresetSort>('recent')
+  const [totalSaved, setTotalSaved] = useState(0)
+  const [togglingFavId, setTogglingFavId] = useState<string | null>(null)
   const [authOpen, setAuthOpen] = useState(false)
   const { data: session, status: sessionStatus } = useSession()
 
@@ -463,24 +476,82 @@ export function GlassLab() {
   const fetchSaved = useCallback(async () => {
     try {
       setLoadingSaved(true)
-      const res = await fetch('/api/presets')
+      const params = new URLSearchParams()
+      if (debouncedQuery) params.set('q', debouncedQuery)
+      if (sortMode !== 'recent') params.set('sort', sortMode)
+      const qs = params.toString()
+      const res = await fetch(`/api/presets${qs ? `?${qs}` : ''}`)
       if (!res.ok) throw new Error('加载失败')
-      const data = (await res.json()) as SavedPreset[]
-      setSaved(data)
+      const data = (await res.json()) as {
+        presets: SavedPreset[]
+        total: number
+        limit: number
+      }
+      setSaved(data.presets)
+      setTotalSaved(data.total)
     } catch {
       toast({ title: '预设加载失败', description: '请稍后重试' })
     } finally {
       setLoadingSaved(false)
     }
-  }, [])
+  }, [debouncedQuery, sortMode])
+
+  // Phase 4 M1: debounce the search box so typing doesn't hammer the API.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(presetQuery.trim()), 300)
+    return () => clearTimeout(t)
+  }, [presetQuery])
 
   useEffect(() => {
     // Re-fetch on session transitions (login/logout change the visible set:
-    // private presets vs public ones) — skip the initial 'loading' phase so
-    // each mount resolves with exactly one fetch per settled status.
+    // private presets vs public ones) or when search/sort changes — skip the
+    // initial 'loading' phase so each mount resolves with exactly one fetch
+    // per settled status.
     if (sessionStatus === 'loading') return
     fetchSaved()
   }, [fetchSaved, sessionStatus])
+
+  // ---- Phase 4 M1: favorite toggle (optimistic with rollback) ----
+  const toggleFavorite = useCallback(
+    async (preset: SavedPreset) => {
+      const next = !preset.favorite
+      setSaved(list =>
+        list.map(p => (p.id === preset.id ? { ...p, favorite: next } : p))
+      )
+      setTogglingFavId(preset.id)
+      try {
+        const res = await fetch(`/api/presets/${preset.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ favorite: next }),
+        })
+        if (!res.ok) throw new Error()
+        if (sortMode === 'favorites') {
+          // While "favorites first" sorting is active the row must move to
+          // its server-sorted position — a plain local flip would leave it
+          // stale, so re-fetch the sorted order.
+          fetchSaved()
+        } else {
+          setSaved(list =>
+            list.map(p =>
+              p.id === preset.id ? { ...p, favorite: next } : p
+            )
+          )
+        }
+      } catch {
+        // Roll back the optimistic flip.
+        setSaved(list =>
+          list.map(p =>
+            p.id === preset.id ? { ...p, favorite: preset.favorite } : p
+          )
+        )
+        toast({ title: '收藏状态更新失败', variant: 'destructive' })
+      } finally {
+        setTogglingFavId(null)
+      }
+    },
+    [sortMode, fetchSaved]
+  )
 
   // ---- custom backgrounds (API, Phase 3 M1) ----
   const fetchCustomBgs = useCallback(async () => {
@@ -639,6 +710,7 @@ export function GlassLab() {
         const res = await fetch(`/api/presets/${id}`, { method: 'DELETE' })
         if (!res.ok) throw new Error()
         setSaved(list => list.filter(p => p.id !== id))
+        setTotalSaved(t => Math.max(0, t - 1))
         toast({ title: '已删除预设' })
       } catch {
         toast({ title: '删除失败' })
@@ -757,7 +829,7 @@ export function GlassLab() {
           </div>
           <div className="flex items-center gap-2">
             <span className="hidden rounded-full border border-teal-500/30 bg-teal-500/10 px-2.5 py-1 text-[10px] font-medium text-teal-600 sm:inline-block">
-              Phase 3 · 影像与对比增强进行中
+              Phase 4 · 工作流效率与预设管理进行中
             </span>
             {sessionStatus === 'loading' ? (
               <div className="h-8 w-20 animate-pulse rounded-lg bg-muted" aria-hidden />
@@ -1223,6 +1295,37 @@ export function GlassLab() {
                   <ExportPanel config={config} />
                 </TabsContent>
                 <TabsContent value="saved">
+                  {/* Phase 4 M1: search + sort header */}
+                  <div className="mb-2 flex items-center gap-2">
+                    <div className="relative min-w-0 flex-1">
+                      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        value={presetQuery}
+                        onChange={e => setPresetQuery(e.target.value)}
+                        placeholder="搜索预设…"
+                        className="h-8 pl-8 text-xs"
+                        maxLength={48}
+                        aria-label="搜索预设"
+                        data-testid="preset-search"
+                      />
+                    </div>
+                    <Select
+                      value={sortMode}
+                      onValueChange={v => setSortMode(v as PresetSort)}
+                    >
+                      <SelectTrigger
+                        className="h-8 w-[104px] shrink-0 text-xs"
+                        aria-label="预设排序"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="recent">最新</SelectItem>
+                        <SelectItem value="name">名称</SelectItem>
+                        <SelectItem value="favorites">收藏优先</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="max-h-96 space-y-2 overflow-y-auto pr-1 glass-scroll">
                     {loadingSaved ? (
                       <div className="flex items-center justify-center py-10 text-xs text-muted-foreground">
@@ -1231,8 +1334,12 @@ export function GlassLab() {
                     ) : saved.length === 0 ? (
                       <div className="flex flex-col items-center gap-2 py-10 text-center text-xs text-muted-foreground">
                         <Backpack className="h-8 w-8 opacity-40" />
-                        还没有保存的预设
-                        <span className="text-[10px]">调好参数后点「保存」试试</span>
+                        {debouncedQuery ? '没有匹配的预设' : '还没有保存的预设'}
+                        <span className="text-[10px]">
+                          {debouncedQuery
+                            ? '换个关键词试试'
+                            : '调好参数后点「保存」试试'}
+                        </span>
                       </div>
                     ) : (
                       saved.map(p => (
@@ -1279,6 +1386,30 @@ export function GlassLab() {
                           <Button
                             variant="ghost"
                             size="icon"
+                            className={cn(
+                              'h-7 w-7 shrink-0',
+                              p.favorite
+                                ? 'text-amber-500 hover:text-amber-500'
+                                : 'text-muted-foreground/60'
+                            )}
+                            aria-label={p.favorite ? `取消收藏 ${p.name}` : `收藏 ${p.name}`}
+                            aria-pressed={p.favorite}
+                            title={p.favorite ? '取消收藏' : '收藏'}
+                            data-testid="toggle-favorite"
+                            disabled={togglingFavId === p.id}
+                            onClick={() => toggleFavorite(p)}
+                          >
+                            {togglingFavId === p.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Star
+                                className={cn('h-3.5 w-3.5', p.favorite && 'fill-current')}
+                              />
+                            )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             className="h-7 w-7 shrink-0"
                             aria-label={`载入参数 ${p.name}`}
                             title="载入参数"
@@ -1308,6 +1439,16 @@ export function GlassLab() {
                       ))
                     )}
                   </div>
+                  {/* Phase 4 M1: surface silent truncation (take-limit or
+                      corrupted rows skipped) instead of hiding it. */}
+                  {totalSaved > saved.length && (
+                    <p
+                      className="pt-2 text-center text-[10px] text-muted-foreground"
+                      data-testid="preset-truncated"
+                    >
+                      共 {totalSaved} 条，当前显示 {saved.length} 条
+                    </p>
+                  )}
                 </TabsContent>
               </Tabs>
             </CardShell>
@@ -1332,7 +1473,7 @@ export function GlassLab() {
             </a>{' '}
             (Apache-2.0)
           </span>
-          <span>第三阶段功能增强 · 背景上传 / 预设封面 / A/B 对比（M1–M3）</span>
+          <span>第四阶段功能增强 · 预设收藏搜索 / 撤销重做 / 灵感生成器（M1–M3）</span>
         </div>
       </footer>
     </div>
