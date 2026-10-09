@@ -24,3 +24,10 @@ server.log
 skills/
 standalone.tgz
 .DS_Store
+
+# typescript incremental build artifact
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+
+# sandbox tool results
+tool-results/
