@@ -138,3 +138,26 @@ Stage Summary:
 - 关键决策：多页扩展以页内 Tabs 实现（沙箱仅暴露 / 路由）；next-auth v4 经实测与 Next 16 兼容无需降级方案；公共预设保持游客可删（延续坏行清理能力）；认证故障一律降级不炸端点
 - 沉淀陷阱：radix Slider 可访问名在 Thumb 上；受控 Input 的测试填充需原生 setter；MultiEdit 工具失败会留下部分已应用编辑（需核对）；运行中 dev server 持有旧 Prisma Client，schema 变更后必须重启；哈希路由变化不触发 React 挂载 effect
 - GitHub 产物：repo 20 commits（CI 全绿）、issues #35-#37 闭环、Project 第二阶段 3 条目全 Done
+
+---
+Task ID: 7
+Agent: Z.ai Code (main agent)
+Task: 第三阶段功能增强：M1 背景图自定义上传 / M2 预设封面图 / M3 玻璃效果 A/B 对比模式（issues #38-#40）
+
+Work Log:
+- 前置核实：Phase 1（5/5）与 Phase 2（#35-#37）均已闭环；发现未推送的误提交 7d686f1（仅含 tsconfig.tsbuildinfo 构建产物）→ reset 撤销 + gitignore 补充（78aead8）
+- 建 Issue #38/#39/#40 并全部加入 Project v2
+- Schema：BackgroundImage 模型（Bytes 落 SQLite，所有权与预设一致）+ GlassPreset.cover 可空字段；db push 后彻底重启 dev server（复用沙箱 .zscripts/dev.sh 托管，单次工具会话内启动会被回收——本次实测教训）
+- M1：POST/GET /api/backgrounds + DELETE/[id] + /[id]/raw；魔数嗅探（PNG/JPEG/GIF/RIFF-WEBP）不信客户端 Content-Type；5MB→413；raw 按可见性授权 + private immutable 缓存；前端上传入口/缩略图/删除回退
+- M2：Canvas2D 封面生成器 cover.ts（400×240 JPEG，背景 cover-fit + 玻璃近似 blur/saturate/tint/菲涅尔/glow，双路径：图片与渐变背景，失败返回 null 不阻塞）；zod 白名单 data URL + 200K 上限；body 上限 10KB→300KB；列表封面缩略图 + 存量回退
+- M3：舞台 A/B 分屏（每屏独立背景副本防 backdrop 交叉采样）；分割线 Pointer 拖拽 5~95% 钳制 + role=slider 键盘 ±2/Shift ±10/Home/End；matchMedia <640px 自动上下分屏；Select 分组目标（内置 24 款 + 我的预设，失效回退）；对比内禁用拖拽，关闭完全恢复
+- 【潜伏回归修复】浏览器实测上传 500（Prisma P2003）：过期 JWT 指向 Phase 2 已级联删除的测试用户 → INSERT 违反 FK；新增 getSessionUserIdOrNull()（写入/读取均校验用户存在性，降级游客），实测 500→201
+- 验证：lint+tsc 绿；curl 12 例边界全过（201/400/413/幂等/无字节泄漏/immutable/cover 白名单/超长）；浏览器双端 E2E 全通——上传→自动选中→保存封面（图片+渐变双路径）→对比拖拽（桌面 50→15、移动 21→72）→键盘 15→21→目标切换→关闭恢复→删除回退，0 console error
+- 沉淀陷阱：①agent-browser CDP 输入通道会失效（点击无事件到达 document 捕获层）——探针确认后 agent-browser close 重启即恢复；②Radix Tabs 用 mousedown 激活，合成 .click() 无效必须用可信输入；③页面存在两套 role=tab（分类 chips + 右栏 tabs），语义定位需带 name；④沙箱内手动 nohup/setsid 启动的 dev server 会被工具会话回收，必须走 .zscripts/dev.sh 托管；⑤CSS 属性选择器非 ASCII 值必须加引号
+- 提交 3680fc4 → CI run 37892728268 全绿（quality/build/smoke）→ #38-#40 自动关闭 → 报告回帖 → Project 三条目 Done
+
+Stage Summary:
+- 第三阶段三里程碑全部闭环：背景上传 / 预设封面 / A/B 对比
+- 关键决策：图片字节落 SQLite（standalone 产物天然携带，与 db 形态一致）而非文件系统；封面用 Canvas2D 近似渲染而非 html2canvas（零依赖、backdrop-filter 无法被第三方库正确栅格化）；对比分屏用双背景副本+clip-path 而非单层裁剪
+- 沉淀：会话时效性与数据一致性——任何 JWT 中的 userId 落库前必须校验存在性（账户删除后的 stale cookie 是真实场景）
+- GitHub 产物：repo 22 commits（CI 全绿）、issues #38-#40 闭环、Project 第二/三阶段条目全 Done
