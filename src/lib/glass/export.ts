@@ -9,19 +9,8 @@
  *  - a URL share link (#g=<base64url of config JSON>, unicode-safe)
  */
 
+import { withAlpha } from './color'
 import { DEFAULT_CONFIG, type GlassConfig } from './presets'
-
-function hexToRgba(hex: string, alpha: number): string {
-  const m = hex.replace('#', '')
-  if (!/^[0-9a-f]+$/i.test(m)) return hex
-  const full = m.length === 3 ? m.split('').map(c => c + c).join('') : m
-  const num = parseInt(full.slice(0, 6), 16)
-  if (Number.isNaN(num)) return hex
-  const r = (num >> 16) & 255
-  const g = (num >> 8) & 255
-  const b = num & 255
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`
-}
 
 function radiusPx(cornerRadius: number): string {
   return cornerRadius >= 999 ? '9999px' : `${cornerRadius}px`
@@ -36,7 +25,7 @@ function cssBody(config: GlassConfig): string {
       : ''
   const tint =
     config.tintOpacity > 0
-      ? `\n  /* 染色 ${Math.round(config.tintOpacity * 100)}% */\n  background: ${hexToRgba(config.tint, config.tintOpacity)};`
+      ? `\n  /* 染色 ${Math.round(config.tintOpacity * 100)}% */\n  background: ${withAlpha(config.tint, config.tintOpacity)};`
       : ''
 
   return `/* 生成自 GlassLab 玻璃实验室 — https://github.com/AceGuru-bjx/GlassLab

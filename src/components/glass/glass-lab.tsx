@@ -64,6 +64,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { GlassDemoCard, GlassPill } from '@/components/glass/glass-demo-card'
+import { isDarkColor } from '@/lib/glass/color'
 import {
   CATEGORIES,
   DEFAULT_CONFIG,
@@ -183,16 +184,6 @@ const PARAM_ROWS: {
   { key: 'lightAngle', label: '光源角度', min: 0, max: 360, step: 5, fmt: v => `${v}°` },
   { key: 'elasticity', label: '拖拽弹性', min: 0, max: 1, step: 0.05, fmt: v => `${Math.round(v * 100)}%` },
 ]
-
-function isDarkTint(hex: string): boolean {
-  const m = hex.replace('#', '')
-  if (m.length < 6) return false
-  const num = parseInt(m.slice(0, 6), 16)
-  const r = (num >> 16) & 255
-  const g = (num >> 8) & 255
-  const b = num & 255
-  return (r * 299 + g * 587 + b * 114) / 1000 < 128
-}
 
 /** Map a stage background option to the canvas cover generator spec. */
 function coverSpec(b: BackgroundOption): CoverBackgroundSpec {
@@ -563,7 +554,7 @@ export function GlassLab() {
     setConfig(entry.config)
     setActivePreset(entry.activePreset)
     setDarkContent(
-      entry.config.tintOpacity > 0.3 && isDarkTint(entry.config.tint)
+      entry.config.tintOpacity > 0.3 && isDarkColor(entry.config.tint)
     )
   }, [])
 
@@ -676,7 +667,7 @@ export function GlassLab() {
     pushHistory()
     setConfig({ ...p.config })
     setActivePreset(p.id)
-    setDarkContent(p.config.tintOpacity > 0.3 && isDarkTint(p.config.tint))
+    setDarkContent(p.config.tintOpacity > 0.3 && isDarkColor(p.config.tint))
   }, [pushHistory])
 
   // ---- saved presets (API) ----
@@ -875,7 +866,7 @@ export function GlassLab() {
       pushHistory()
       setConfig(cfg)
       setActivePreset('')
-      setDarkContent(cfg.tintOpacity > 0.3 && isDarkTint(cfg.tint))
+      setDarkContent(cfg.tintOpacity > 0.3 && isDarkColor(cfg.tint))
       toast({ title: '已载入分享的玻璃配置' })
     })
     return () => cancelAnimationFrame(raf)
@@ -1631,7 +1622,7 @@ export function GlassLab() {
                               setConfig({ ...DEFAULT_CONFIG, ...p.config })
                               setActivePreset('')
                               setDarkContent(
-                                p.config.tintOpacity > 0.3 && isDarkTint(p.config.tint)
+                                p.config.tintOpacity > 0.3 && isDarkColor(p.config.tint)
                               )
                               toast({ title: '已载入预设', description: p.name })
                             }}

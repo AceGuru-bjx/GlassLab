@@ -20,6 +20,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { withAlpha } from '@/lib/glass/color'
 import { renderDisplacementMap } from '@/lib/glass/displacement-map'
 import type { GlassConfig } from '@/lib/glass/presets'
 
@@ -163,7 +164,7 @@ function LiquidGlassImpl({
     ? `url(#${filterId})`
     : `blur(${Math.max(config.blur, 8)}px) saturate(${config.saturation}%)`
 
-  const tintRgba = useMemo(() => hexToRgba(config.tint, config.tintOpacity), [
+  const tintRgba = useMemo(() => withAlpha(config.tint, config.tintOpacity), [
     config.tint,
     config.tintOpacity,
   ])
@@ -390,17 +391,6 @@ function LiquidGlassImpl({
       </div>
     </div>
   )
-}
-
-function hexToRgba(hex: string, alpha: number): string {
-  const m = hex.replace('#', '')
-  const full = m.length === 3 ? m.split('').map(c => c + c).join('') : m
-  const num = parseInt(full, 16)
-  if (Number.isNaN(num)) return hex
-  const r = (num >> 16) & 255
-  const g = (num >> 8) & 255
-  const b = num & 255
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
 export const LiquidGlass = memo(LiquidGlassImpl)
