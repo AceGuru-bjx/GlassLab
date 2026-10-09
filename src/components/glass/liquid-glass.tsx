@@ -168,11 +168,16 @@ function LiquidGlassImpl({
     config.tintOpacity,
   ])
 
-  // Fresnel rim highlight — Kyant0 HighlightStyle.Default (45°, plus-blend).
+  // Fresnel rim highlight — Kyant0 HighlightStyle.Default (plus-blend).
+  // Phase 2: direction is user-controlled via `lightAngle`; overLight rotates
+  // 90° to keep the rim readable against bright backdrops.
   const highlight = Math.max(0, Math.min(1, config.highlight))
   const ringPad = 1.5
 
   const overLight = config.overLight
+  const lightAngleDeg =
+    ((Math.round(Number.isFinite(config.lightAngle) ? config.lightAngle : 45) % 360) + 360) % 360
+  const rimAngle = overLight ? (lightAngleDeg + 90) % 360 : lightAngleDeg
 
   return (
     <div
@@ -346,7 +351,7 @@ function LiquidGlassImpl({
           style={{
             ...radiusStyle(),
             padding: ringPad,
-            background: `linear-gradient(${(overLight ? 135 : 45)}deg,
+            background: `linear-gradient(${rimAngle}deg,
               rgba(255,255,255,${0.75 * highlight}) 0%,
               rgba(255,255,255,${0.18 * highlight}) 28%,
               rgba(255,255,255,${0.02 * highlight}) 50%,

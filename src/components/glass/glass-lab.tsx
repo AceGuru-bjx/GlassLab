@@ -24,8 +24,10 @@ import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { GlassDemoCard, GlassPill } from '@/components/glass/glass-demo-card'
 import {
+  CATEGORIES,
   DEFAULT_CONFIG,
   PRESETS,
+  type GlassCategory,
   type GlassConfig,
   type GlassPreset,
 } from '@/lib/glass/presets'
@@ -104,6 +106,7 @@ type NumericKey = keyof Pick<
   | 'saturation'
   | 'cornerRadius'
   | 'highlight'
+  | 'lightAngle'
   | 'elasticity'
 >
 
@@ -122,6 +125,7 @@ const PARAM_ROWS: {
   { key: 'saturation', label: '饱和度', min: 0, max: 220, step: 5, fmt: v => `${v}%` },
   { key: 'cornerRadius', label: '圆角半径', min: 0, max: 64, step: 1, fmt: v => `${v}px` },
   { key: 'highlight', label: '菲涅尔高光', min: 0, max: 1, step: 0.01, fmt: v => `${Math.round(v * 100)}%` },
+  { key: 'lightAngle', label: '光源角度', min: 0, max: 360, step: 5, fmt: v => `${v}°` },
   { key: 'elasticity', label: '拖拽弹性', min: 0, max: 1, step: 0.05, fmt: v => `${Math.round(v * 100)}%` },
 ]
 
@@ -237,6 +241,7 @@ function CardShell({
 export function GlassLab() {
   const [config, setConfig] = useState<GlassConfig>(DEFAULT_CONFIG)
   const [activePreset, setActivePreset] = useState<string>('ios-clear')
+  const [category, setCategory] = useState<'全部' | GlassCategory>('全部')
   const [bg, setBg] = useState<BackgroundOption>(BACKGROUNDS[0])
   const [darkContent, setDarkContent] = useState(false)
   const [presetName, setPresetName] = useState('')
@@ -337,8 +342,8 @@ export function GlassLab() {
               </p>
             </div>
           </div>
-          <span className="hidden rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-medium text-emerald-600 sm:inline-block">
-            Phase 1 · 检查 4/5 进行中
+          <span className="hidden rounded-full border border-teal-500/30 bg-teal-500/10 px-2.5 py-1 text-[10px] font-medium text-teal-600 sm:inline-block">
+            Phase 2 · 功能增强进行中
           </span>
         </div>
       </header>
@@ -347,9 +352,39 @@ export function GlassLab() {
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-[260px_minmax(0,1fr)_320px]">
           {/* ---------- Left: style presets ---------- */}
           <aside className="order-2 min-w-0 lg:order-1">
-            <CardShell icon={<Palette className="h-3.5 w-3.5" />} title="玻璃样式库" hint="12 款">
+            <CardShell
+              icon={<Palette className="h-3.5 w-3.5" />}
+              title="玻璃样式库"
+              hint={`${PRESETS.length} 款`}
+            >
+              {/* category filter chips */}
+              <div
+                className="mb-3 flex gap-1.5 overflow-x-auto pb-1"
+                role="tablist"
+                aria-label="样式分类筛选"
+              >
+                {(['全部', ...CATEGORIES] as const).map(c => (
+                  <button
+                    key={c}
+                    role="tab"
+                    aria-selected={category === c}
+                    onClick={() => setCategory(c)}
+                    data-testid={`category-${c}`}
+                    className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all ${
+                      category === c
+                        ? 'border-teal-500 bg-teal-500/10 text-teal-600'
+                        : 'text-muted-foreground hover:border-teal-500/40 hover:text-foreground'
+                    }`}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
               <div className="grid max-h-[520px] grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3 lg:grid-cols-2 glass-scroll">
-                {PRESETS.map(p => (
+                {(category === '全部'
+                  ? PRESETS
+                  : PRESETS.filter(p => p.category === category)
+                ).map(p => (
                   <button
                     key={p.id}
                     onClick={() => applyPreset(p)}
@@ -597,7 +632,7 @@ export function GlassLab() {
             </a>{' '}
             (Apache-2.0)
           </span>
-          <span>第一阶段全面深度检查 · 4/5 交互功能与数据层</span>
+          <span>第二阶段功能增强 · M1 样式库与引擎升级（24 款 · 光源角度）</span>
         </div>
       </footer>
     </div>

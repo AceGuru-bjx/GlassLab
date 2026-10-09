@@ -23,6 +23,11 @@ function Slider({
     [value, defaultValue, min, max]
   )
 
+  // Radix keeps the accessible name on the thumb, not the root — an
+  // aria-label passed to <Slider /> must be forwarded to every Thumb or
+  // screen readers announce an unnamed slider.
+  const { "aria-label": ariaLabel, ...rootProps } = props
+
   return (
     <SliderPrimitive.Root
       data-slot="slider"
@@ -34,7 +39,7 @@ function Slider({
         "relative flex w-full touch-none items-center select-none data-[disabled]:opacity-50 data-[orientation=vertical]:h-full data-[orientation=vertical]:min-h-44 data-[orientation=vertical]:w-auto data-[orientation=vertical]:flex-col",
         className
       )}
-      {...props}
+      {...rootProps}
     >
       <SliderPrimitive.Track
         data-slot="slider-track"
@@ -53,6 +58,7 @@ function Slider({
         <SliderPrimitive.Thumb
           data-slot="slider-thumb"
           key={index}
+          aria-label={ariaLabel}
           className="border-primary bg-background ring-ring/50 block size-4 shrink-0 rounded-full border shadow-sm transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
         />
       ))}

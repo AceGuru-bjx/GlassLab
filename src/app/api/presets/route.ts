@@ -37,6 +37,9 @@ const glassConfigSchema = z.object({
   cornerRadius: z.number().min(0).max(999),
   depthEffect: z.boolean(),
   highlight: z.number().min(0).max(1),
+  // Phase 2 field — default keeps pre-lightAngle payloads (older clients and
+  // stored rows) valid instead of 400/corrupt.
+  lightAngle: z.number().min(0).max(360).default(45),
   tint: colorField(32),
   tintOpacity: z.number().min(0).max(1),
   overLight: z.boolean(),
