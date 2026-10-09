@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
+import { getSessionOrNull } from '@/lib/session'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,7 +20,12 @@ function parseStoredConfig(
   }
 }
 
-/** DELETE /api/presets/[id] — remove a saved glass preset. */
+/**
+ * DELETE /api/presets/[id] — remove a saved glass preset.
+ * Ownership rules: presets owned by a user can only be deleted by that user
+ * (403 otherwise); public presets (userId = null) stay openly deletable so
+ * corrupted rows can always be cleaned up.
+ */
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -33,6 +39,16 @@ export async function DELETE(
     const existing = await db.glassPreset.findUnique({ where: { id } })
     if (!existing) {
       return NextResponse.json({ error: 'Preset not found' }, { status: 404 })
+    }
+
+    if (existing.userId) {
+      const session = await getSessionOrNull()
+      if (session?.user?.id !== existing.userId) {
+        return NextResponse.json(
+          { error: '无权删除他人预设' },
+          { status: 403 }
+        )
+      }
     }
 
     try {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
+import { getSessionOrNull } from '@/lib/session'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,10 +68,17 @@ function parseStoredConfig(raw: string): { ok: true; value: unknown } | { ok: fa
   }
 }
 
-/** GET /api/presets — list all saved glass presets (newest first). */
+/**
+ * GET /api/presets — list presets visible to the caller (newest first).
+ * Signed-in users see their own presets; guests see public presets
+ * (userId = null, i.e. saved without an account).
+ */
 export async function GET() {
   try {
+    const session = await getSessionOrNull()
+    const userId = session?.user?.id
     const rows = await db.glassPreset.findMany({
+      where: userId ? { userId } : { userId: null },
       orderBy: { createdAt: 'desc' },
       take: 100,
     })
@@ -125,10 +133,13 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    const session = await getSessionOrNull()
     const row = await db.glassPreset.create({
       data: {
         name: parsed.data.name,
         config: JSON.stringify(parsed.data.config),
+        // Signed-in → private preset owned by the user; guest → public.
+        userId: session?.user?.id ?? null,
       },
     })
 

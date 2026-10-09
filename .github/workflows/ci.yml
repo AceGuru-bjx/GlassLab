@@ -107,6 +107,7 @@ jobs:
         env:
           PORT: "3100"
           HOSTNAME: 127.0.0.1
+          NEXTAUTH_SECRET: glasslab-smoke-secret
         run: |
           # CWD is the unpacked bundle root — same shape as a real deployment.
           export DATABASE_URL="file:$(pwd)/db/custom.db"

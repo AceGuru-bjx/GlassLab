@@ -14,12 +14,15 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  posts     Post[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String        @id @default(cuid())
+  email        String        @unique
+  name         String?
+  /// scrypt hash (salt:hex) — null for accounts without credentials sign-in
+  passwordHash String?
+  posts        Post[]
+  presets      GlassPreset[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 }
 
 model Post {
@@ -36,13 +39,18 @@ model Post {
 }
 
 /// Saved glass configurations from the Glass Lab.
+/// userId = null → public preset (visible/deletable by guests);
+/// userId set  → owned by that user (private).
 model GlassPreset {
   id        String   @id @default(cuid())
   name      String
   /// Full GlassConfig JSON (see src/lib/glass/presets.ts)
   config    String
+  owner     User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([createdAt])
+  @@index([userId])
 }

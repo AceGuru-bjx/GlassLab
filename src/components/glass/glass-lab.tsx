@@ -2,12 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
+import { signIn, signOut, useSession } from 'next-auth/react'
 import {
   Backpack,
   Check,
   Copy,
   Import,
   Loader2,
+  LogIn,
+  LogOut,
   MousePointer2,
   Palette,
   Save,
@@ -17,6 +20,8 @@ import {
   Trash2,
 } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
+
+import { AuthDialog } from '@/components/glass/auth-dialog'
 
 import {
   configToCss,
@@ -390,6 +395,8 @@ export function GlassLab() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [saved, setSaved] = useState<SavedPreset[]>([])
   const [loadingSaved, setLoadingSaved] = useState(true)
+  const [authOpen, setAuthOpen] = useState(false)
+  const { data: session, status: sessionStatus } = useSession()
 
   const stageRef = useRef<HTMLDivElement>(null)
 
@@ -420,8 +427,12 @@ export function GlassLab() {
   }, [])
 
   useEffect(() => {
+    // Re-fetch on session transitions (login/logout change the visible set:
+    // private presets vs public ones) — skip the initial 'loading' phase so
+    // each mount resolves with exactly one fetch per settled status.
+    if (sessionStatus === 'loading') return
     fetchSaved()
-  }, [fetchSaved])
+  }, [fetchSaved, sessionStatus])
 
   // ---- share-link deep load (#g=<payload>) ----
   // rAF-deferred: keeps the effect free of synchronous state writes.
@@ -502,9 +513,51 @@ export function GlassLab() {
               </p>
             </div>
           </div>
-          <span className="hidden rounded-full border border-teal-500/30 bg-teal-500/10 px-2.5 py-1 text-[10px] font-medium text-teal-600 sm:inline-block">
-            Phase 2 · 功能增强进行中
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="hidden rounded-full border border-teal-500/30 bg-teal-500/10 px-2.5 py-1 text-[10px] font-medium text-teal-600 sm:inline-block">
+              Phase 2 · 功能增强进行中
+            </span>
+            {sessionStatus === 'loading' ? (
+              <div className="h-8 w-20 animate-pulse rounded-lg bg-muted" aria-hidden />
+            ) : session?.user ? (
+              <div className="flex items-center gap-1.5" data-testid="user-area">
+                <span
+                  className="flex h-8 items-center gap-1.5 rounded-full border bg-card/80 px-2.5 text-xs font-medium"
+                  title={session.user.email ?? ''}
+                >
+                  <span
+                    aria-hidden
+                    className="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-teal-400 to-violet-400 text-[10px] font-bold text-white"
+                  >
+                    {(session.user.name ?? session.user.email ?? '?').slice(0, 1).toUpperCase()}
+                  </span>
+                  <span className="max-w-[96px] truncate">
+                    {session.user.name ?? session.user.email}
+                  </span>
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1 px-2 text-xs"
+                  onClick={() => signOut({ callbackUrl: '/' })}
+                  data-testid="signout"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  登出
+                </Button>
+              </div>
+            ) : (
+              <Button
+                size="sm"
+                className="h-8 gap-1 px-3 text-xs"
+                onClick={() => setAuthOpen(true)}
+                data-testid="login-button"
+              >
+                <LogIn className="h-3.5 w-3.5" />
+                登录
+              </Button>
+            )}
+          </div>
         </div>
       </header>
 
@@ -783,6 +836,8 @@ export function GlassLab() {
         </div>
       </main>
 
+      <AuthDialog open={authOpen} onOpenChange={setAuthOpen} />
+
       {/* ---------- Sticky footer ---------- */}
       <footer className="mt-auto border-t border-white/10 bg-background/70 py-4 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-1.5 px-4 text-[11px] text-muted-foreground sm:flex-row">
@@ -798,7 +853,7 @@ export function GlassLab() {
             </a>{' '}
             (Apache-2.0)
           </span>
-          <span>第二阶段功能增强 · M2 导出与分享（CSS / React / JSON / 链接）</span>
+          <span>第二阶段功能增强 · M3 多用户预设（登录后私有 · 游客公共）</span>
         </div>
       </footer>
     </div>
