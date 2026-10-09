@@ -1,2 +1,26 @@
-skills/
+# deps
 node_modules/
+
+# next.js build output
+.next/
+out/
+
+# env & secrets
+.env
+.env.*
+!.env.example
+
+# local databases (provisioned fresh via `prisma db push`)
+db/*.db
+db/*.db-journal
+
+# logs
+dev.log
+server.log
+*.log
+
+# sandbox tooling / local artifacts
+.zscripts/
+skills/
+standalone.tgz
+.DS_Store
