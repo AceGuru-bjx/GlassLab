@@ -43,6 +43,10 @@ export interface GlassConfig {
   glowOpacity: number
   /** Phase 9 M1: glow diffusion radius in px (box-shadow blur radius) */
   glowSpread: number
+  /** Phase 9 M3: glow breathing speed — 0=off, 1=fastest (period 3.6s→0.6s) */
+  glowPulse: number
+  /** Phase 9 M3: rim highlight flow speed — 0=off, 1=fastest (period 6s→1.5s) */
+  rimFlow: number
   /** Phase 5: frosted grain overlay (SVG feTurbulence noise), 0..1 */
   frost: number
   /** Phase 9 M2: horizontal brushed-metal streaks, 0..1 */
@@ -88,6 +92,8 @@ export const DEFAULT_CONFIG: GlassConfig = {
   glow: 'transparent',
   glowOpacity: 1,
   glowSpread: 24,
+  glowPulse: 0,
+  rimFlow: 0,
   frost: 0,
   brushed: 0,
   bubbles: 0,

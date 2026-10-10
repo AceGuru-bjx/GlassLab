@@ -53,6 +53,10 @@ const glassConfigSchema = z.object({
   // pre-Phase-9 payloads (older clients and stored rows) visually identical.
   glowOpacity: z.number().min(0).max(1).default(1),
   glowSpread: z.number().min(0).max(60).default(24),
+  // Phase 9 M3: motion system — default 0 (static) keeps every stored row
+  // and older client payload rendering identically.
+  glowPulse: z.number().min(0).max(1).default(0),
+  rimFlow: z.number().min(0).max(1).default(0),
   // Phase 5 layered effects — defaults keep pre-Phase-5 payloads (older
   // clients and stored rows) valid instead of 400/corrupt.
   frost: z.number().min(0).max(1).default(0),

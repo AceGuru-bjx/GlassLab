@@ -189,6 +189,8 @@ type NumericKey = keyof Pick<
   | 'vignette'
   | 'glowOpacity'
   | 'glowSpread'
+  | 'glowPulse'
+  | 'rimFlow'
 >
 
 const PARAM_ROWS: {
@@ -219,6 +221,9 @@ const PARAM_ROWS: {
   // ---- Phase 9 M1: glow system ----
   { key: 'glowOpacity', label: '辉光强度', min: 0, max: 1, step: 0.01, fmt: v => `${Math.round(v * 100)}%` },
   { key: 'glowSpread', label: '辉光范围', min: 0, max: 60, step: 1, fmt: v => `${v}px` },
+  // ---- Phase 9 M3: motion system (fmt shows the actual period) ----
+  { key: 'glowPulse', label: '辉光呼吸', min: 0, max: 1, step: 0.01, fmt: v => (v <= 0.01 ? '关' : `${(3.6 - 3.0 * v).toFixed(1)}s`) },
+  { key: 'rimFlow', label: '高光流动', min: 0, max: 1, step: 0.01, fmt: v => (v <= 0.01 ? '关' : `${(6 - 4.5 * v).toFixed(1)}s`) },
 ]
 
 /** Map a stage background option to the canvas cover generator spec. */
@@ -264,6 +269,9 @@ const RANDOM_RANGES: Record<NumericKey, [number, number]> = {
   vignette: [0, 0.35],
   glowOpacity: [0.5, 1],
   glowSpread: [12, 40],
+  // Motion params deliberately never randomize — animations are opt-in.
+  glowPulse: [0, 0],
+  rimFlow: [0, 0],
 }
 
 /** Phase 4 M3: variant jitter amplitude (±15% of the current value). */

@@ -259,6 +259,17 @@ function LiquidGlassImpl({
     config.glow && config.glow !== 'transparent'
       ? scaleColorAlpha(config.glow, glowOpacity)
       : null
+  // ---- Phase 9 M3: motion system ----
+  // Glow breathing: the shadow moves to a dedicated layer whose opacity
+  // oscillates (animating the backdrop layer would fade the refraction).
+  // Rim flow: the fresnel angle sweeps 360° via a registered <angle> var.
+  // prefers-reduced-motion disables both through [data-glass-animated].
+  const glowPulse = Math.max(0, Math.min(1, config.glowPulse ?? 0))
+  const rimFlow = Math.max(0, Math.min(1, config.rimFlow ?? 0))
+  const glowPulsePeriod = (3.6 - 3.0 * glowPulse).toFixed(1)
+  const rimFlowPeriod = (6 - 4.5 * rimFlow).toFixed(1)
+  const glowAnimated = glowPulse > 0.01 && !!glowColor
+  const rimAnimated = rimFlow > 0.01
   // Frosted grain: feTurbulence -> white grain w/ noise-derived alpha.
   // Pure SVG-filter overlay, so unlike the refraction path it also works
   // on Safari/Firefox (no backdrop url() needed).
@@ -440,12 +451,28 @@ function LiquidGlassImpl({
           willChange: 'backdrop-filter',
           // Outer glow via box-shadow (a host-level `filter` would turn the
           // host into a backdrop root and break the refraction sampling).
-          // Phase 9: radius/spread and intensity are independent params.
-          boxShadow: glowColor
+          // Phase 9: radius/spread and intensity are independent params; with
+          // glowPulse on, the shadow moves to its own breathing layer below.
+          boxShadow: !glowAnimated && glowColor
             ? `0 0 ${glowSpread}px ${(glowSpread / 12).toFixed(1)}px ${glowColor}`
             : undefined,
         }}
       />
+
+      {/* Phase 9 M3: breathing glow — dedicated shadow-only layer whose
+          opacity oscillates; box-shadow follows the synced border-radius. */}
+      {glowAnimated && (
+        <div
+          aria-hidden
+          data-glass-animated=""
+          className="pointer-events-none absolute inset-0"
+          style={{
+            ...radiusStyle(),
+            boxShadow: `0 0 ${glowSpread}px ${(glowSpread / 12).toFixed(1)}px ${glowColor}`,
+            animation: `glass-glow-pulse ${glowPulsePeriod}s ease-in-out infinite alternate`,
+          }}
+        />
+      )}
 
       {/* Tint */}
       {config.tintOpacity > 0 && (
@@ -535,15 +562,27 @@ function LiquidGlassImpl({
         />
       )}
 
-      {/* Fresnel rim highlight (gradient ring via mask composite) */}
+      {/* Fresnel rim highlight (gradient ring via mask composite).
+          Phase 9 M3: rimFlow sweeps the gradient angle through a registered
+          <angle> custom property — smooth in modern browsers, static elsewhere. */}
       {highlight > 0.01 && (
         <div
           aria-hidden
+          data-glass-animated={rimAnimated ? '' : undefined}
           className="pointer-events-none absolute inset-0"
           style={{
             ...radiusStyle(),
             padding: ringPad,
-            background: `linear-gradient(${rimAngle}deg,
+            ...(rimAnimated
+              ? ({
+                  '--glass-rim-start': `${rimAngle}deg`,
+                  '--glass-rim-angle': `${rimAngle}deg`,
+                  animation: `glass-rim-flow ${rimFlowPeriod}s linear infinite`,
+                } as React.CSSProperties)
+              : {}),
+            background: `linear-gradient(${
+              rimAnimated ? 'var(--glass-rim-angle)' : `${rimAngle}deg`
+            },
               ${withAlpha(highlightColor, 0.75 * highlight)} 0%,
               ${withAlpha(highlightColor, 0.18 * highlight)} 28%,
               ${withAlpha(highlightColor, 0.02 * highlight)} 50%,

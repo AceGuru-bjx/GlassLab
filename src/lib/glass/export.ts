@@ -77,6 +77,39 @@ function cssBody(config: GlassConfig): string {
       ? `\n\n/* 边缘高斯弥散 ${Math.round(edgeBlur * 100)}% — 边缘环 backdrop-blur，中心保持清晰 */\n.liquid-glass::after {\n  content: "";\n  position: absolute;\n  inset: 0;\n  border-radius: inherit;\n  padding: ${edgeBand}px;\n  pointer-events: none;\n  -webkit-backdrop-filter: blur(${edgeBlurPx}px);\n  backdrop-filter: blur(${edgeBlurPx}px);\n  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);\n  -webkit-mask-composite: xor;\n  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);\n  mask-composite: exclude;\n}`
       : ''
 
+  // ---- Phase 9 M3: motion export ----
+  const glowPulse = Math.max(0, Math.min(1, config.glowPulse ?? 0))
+  const rimFlow = Math.max(0, Math.min(1, config.rimFlow ?? 0))
+  const glowPulsePeriod = (3.6 - 3.0 * glowPulse).toFixed(1)
+  const rimFlowPeriod = (6 - 4.5 * rimFlow).toFixed(1)
+  const hasGlow = !!(config.glow && config.glow !== 'transparent')
+  // Glow breathing animates the root's full box-shadow stack (only the glow
+  // alpha differs between the two keyframes) — box-shadow interpolates.
+  const glowAnimationRule =
+    glowPulse > 0.01 && hasGlow
+      ? `\n  animation: glass-glow-pulse ${glowPulsePeriod}s ease-in-out infinite alternate;`
+      : ''
+  const glowPulseKeyframes =
+    glowPulse > 0.01 && hasGlow
+      ? `\n\n/* 辉光呼吸（周期 ${glowPulsePeriod}s） */\n@keyframes glass-glow-pulse {\n  from { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28),\n    inset 0 -1px 0 rgba(0, 0, 0, 0.12), 0 8px 32px rgba(0, 0, 0, 0.12)${vignetteShadow},\n  0 0 ${glowSpread}px ${(glowSpread / 12).toFixed(1)}px ${scaleColorAlpha(config.glow, glowOpacity)}; }\n  to { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28),\n    inset 0 -1px 0 rgba(0, 0, 0, 0.12), 0 8px 32px rgba(0, 0, 0, 0.12)${vignetteShadow},\n  0 0 ${glowSpread}px ${(glowSpread / 12).toFixed(1)}px ${scaleColorAlpha(config.glow, glowOpacity * 0.45)}; }\n}`
+      : ''
+  // Rim flow swaps the ::before gradient to the animated angle variable and
+  // registers it via @property for smooth <angle> interpolation.
+  const rimAngleDeg = ((Math.round(Number.isFinite(config.lightAngle) ? config.lightAngle : 45) % 360) + 360) % 360
+  const rimFlowRule =
+    rimFlow > 0.01
+      ? `\n  --glass-rim-start: ${rimAngleDeg}deg;\n  --glass-rim-angle: ${rimAngleDeg}deg;\n  animation: glass-rim-flow ${rimFlowPeriod}s linear infinite;`
+      : ''
+  const rimGradientAngle = rimFlow > 0.01 ? 'var(--glass-rim-angle)' : `${config.lightAngle}deg`
+  const rimFlowKeyframes =
+    rimFlow > 0.01
+      ? `\n\n/* 高光流动（周期 ${rimFlowPeriod}s）— @property 注册 <angle> 平滑插值 */\n@property --glass-rim-angle {\n  syntax: "<angle>";\n  initial-value: 0deg;\n  inherits: false;\n}\n@keyframes glass-rim-flow {\n  from { --glass-rim-angle: var(--glass-rim-start); }\n  to { --glass-rim-angle: calc(var(--glass-rim-start) + 360deg); }\n}`
+      : ''
+  const motionGuard =
+    glowPulse > 0.01 || rimFlow > 0.01
+      ? `\n\n@media (prefers-reduced-motion: reduce) {\n  .liquid-glass, .liquid-glass::before { animation: none !important; }\n}`
+      : ''
+
   return `/* 生成自 GlassLab 玻璃实验室 — https://github.com/AceGuru-bjx/GlassLab
  * 说明：blur/saturate/染色/磨砂噪点/暗角/边缘高斯弥散/辉光为纯 CSS；
  * 完整的边缘位移折射（Kyant0 算法）由 JS 引擎驱动，见上方仓库。 */
@@ -86,7 +119,7 @@ function cssBody(config: GlassConfig): string {
   -webkit-backdrop-filter: blur(${config.blur}px) saturate(${config.saturation}%);
   backdrop-filter: blur(${config.blur}px) saturate(${config.saturation}%);${tintBg}${frostBg}
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.12), 0 8px 32px rgba(0, 0, 0, 0.12)${vignetteShadow}${glow};
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12), 0 8px 32px rgba(0, 0, 0, 0.12)${vignetteShadow}${glow};${glowAnimationRule}
 }
 
 /* 菲涅尔边缘高光 ${Math.round(hl * 100)}% @ ${config.lightAngle}° */
@@ -97,17 +130,17 @@ function cssBody(config: GlassConfig): string {
   border-radius: inherit;
   padding: 1.5px;
   pointer-events: none;
-  background: linear-gradient(${config.lightAngle}deg,
+  background: linear-gradient(${rimGradientAngle},
     ${withAlpha(hlColor, 0.75 * hl)} 0%,
     ${withAlpha(hlColor, 0.18 * hl)} 28%,
     ${withAlpha(hlColor, 0.02 * hl)} 50%,
     ${withAlpha(hlColor, 0.1 * hl)} 72%,
-    ${withAlpha(hlColor, 0.45 * hl)} 100%);
+    ${withAlpha(hlColor, 0.45 * hl)} 100%);${rimFlowRule}
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask-composite: exclude;
-}${edgeLayer}`
+}${edgeLayer}${glowPulseKeyframes}${rimFlowKeyframes}${motionGuard}`
 }
 
 /** Standalone CSS export. */
@@ -209,6 +242,8 @@ export function validateConfigObject(raw: unknown): GlassConfig | null {
     'vignette',
     'glowOpacity',
     'glowSpread',
+    'glowPulse',
+    'rimFlow',
   ] as const
   for (const k of numKeys) {
     const v = Number(merged[k])

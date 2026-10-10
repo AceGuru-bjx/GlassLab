@@ -190,3 +190,45 @@
 .glass-scroll::-webkit-scrollbar-thumb:hover {
   background: rgba(120, 120, 135, 0.55);
 }
+
+/* ---------------------------------------------------------------------------
+ * Phase 9 M3: glass motion system (glow breathing + rim angle flow).
+ * Exported CSS re-emits the same blocks (identical names, identical
+ * definitions) — see lib/glass/export.ts.
+ * ------------------------------------------------------------------------- */
+
+/* Registering the angle lets linear-gradient() interpolate smoothly while
+ * the keyframes sweep 360°. Browsers without @property discrete-flip at
+ * 50% (graceful degradation; the static angle still renders). */
+@property --glass-rim-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+/* Glow breathing: opacity oscillation of a dedicated shadow-only layer. */
+@keyframes glass-glow-pulse {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.45;
+  }
+}
+
+/* Rim flow: the fresnel ring's gradient angle rotates a full turn. */
+@keyframes glass-rim-flow {
+  from {
+    --glass-rim-angle: var(--glass-rim-start);
+  }
+  to {
+    --glass-rim-angle: calc(var(--glass-rim-start) + 360deg);
+  }
+}
+
+/* Accessibility: motion is an enhancement, never a requirement (#88). */
+@media (prefers-reduced-motion: reduce) {
+  [data-glass-animated] {
+    animation: none !important;
+  }
+}
