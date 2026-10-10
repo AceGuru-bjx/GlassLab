@@ -1,6 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from 'react'
 import { motion } from 'framer-motion'
 import { signIn, signOut, useSession } from 'next-auth/react'
 import {
@@ -229,6 +236,18 @@ const randInt = (lo: number, hi: number) =>
 const randFloat = (lo: number, hi: number) =>
   Math.round((lo + Math.random() * (hi - lo)) * 100) / 100
 
+/** Value-changing slider keys — the keyboard gesture equivalent of a grab. */
+const SLIDER_VALUE_KEYS = new Set([
+  'ArrowLeft',
+  'ArrowRight',
+  'ArrowUp',
+  'ArrowDown',
+  'Home',
+  'End',
+  'PageUp',
+  'PageDown',
+])
+
 function ConfigPanel({
   config,
   onChange,
@@ -250,6 +269,20 @@ function ConfigPanel({
   lockedParams: Set<NumericKey>
   onToggleLock: (key: NumericKey) => void
 }) {
+  // #62: keyboard nudges are the a11y path to sliders — without a checkpoint
+  // they bypass undo entirely AND get silently absorbed as the baseline of the
+  // next pointer checkpoint. Capture phase fires before radix applies the
+  // value change, so the checkpoint snapshots the pre-change state; a 600 ms
+  // window coalesces held-key auto-repeat (~30/s) into one burst checkpoint,
+  // matching the one-checkpoint-per-gesture semantics of the pointer path.
+  const keyboardCheckpointRef = useRef(0)
+  const onSliderKeyDownCapture = (e: ReactKeyboardEvent) => {
+    if (!SLIDER_VALUE_KEYS.has(e.key)) return
+    const now = Date.now()
+    if (now - keyboardCheckpointRef.current < 600) return
+    keyboardCheckpointRef.current = now
+    onHistoryCheckpoint?.()
+  }
   return (
     <div className="space-y-5" data-testid="config-panel">
       {PARAM_ROWS.map(r => {
@@ -287,6 +320,7 @@ function ConfigPanel({
               step={r.step}
               aria-label={r.label}
               onPointerDown={onHistoryCheckpoint}
+              onKeyDownCapture={onSliderKeyDownCapture}
               onValueChange={([v]) => onChange({ [r.key]: v } as Partial<GlassConfig>)}
             />
           </div>
@@ -1112,7 +1146,9 @@ export function GlassLab() {
                   <button
                     key={c}
                     role="tab"
+                    id={`category-tab-${c}`}
                     aria-selected={category === c}
+                    aria-controls="preset-grid"
                     onClick={() => setCategory(c)}
                     data-testid={`category-${c}`}
                     className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all ${
@@ -1125,7 +1161,12 @@ export function GlassLab() {
                   </button>
                 ))}
               </div>
-              <div className="grid max-h-[520px] grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3 lg:grid-cols-2 glass-scroll">
+              <div
+                id="preset-grid"
+                role="tabpanel"
+                aria-label="玻璃预设列表"
+                className="grid max-h-[520px] grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3 lg:grid-cols-2 glass-scroll"
+              >
                 {(category === '全部'
                   ? PRESETS
                   : PRESETS.filter(p => p.category === category)
