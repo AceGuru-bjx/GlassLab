@@ -172,6 +172,11 @@ export async function GET(
 ) {
   try {
     const { id } = await params
+    // Shape guard mirrors DELETE/PATCH (#81): a bogus id is a client error
+    // (400), not a missing resource (404), and never reaches SQLite.
+    if (!id || id.length < 8 || id.length > 64) {
+      return NextResponse.json({ error: 'Invalid preset id' }, { status: 400 })
+    }
     const row = await db.glassPreset.findUnique({ where: { id } })
     if (!row) {
       return NextResponse.json({ error: 'Preset not found' }, { status: 404 })
