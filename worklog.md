@@ -338,3 +338,31 @@ Stage Summary:
 未解决/风险与下一步建议：
 - PR #364 仍待 Ultra-Guru 维护者评审（无评论，属正常等待）
 - 下轮候选：①辉光强度独立参数（glowOpacity，现固定 0.32 alpha）；②拉丝/气泡等新纹理层；③导出 CSS 的 edgeBlur 方案（Phase 5 遗留）；④高光色与 lightAngle 的联动预设动画
+
+---
+Task ID: 15
+Agent: Z.ai Code (webDevReview 定时巡检)
+Task: 巡检轮——QA 冒烟全绿后自主开发第九阶段：辉光系统升级（#86）/ 质感纹理层（#87）/ 微动效系统（#88）
+
+Work Log:
+- 前置核实：worklog Task 14 闭环态；环境完好（git ff9bc03 与远程同步、CI 绿、0 open issue、dev server 200、PR #364 新增 1 评论确认为 CI 机器人 APK 体积报告非维护者评审）
+- agent-browser 全站 QA 冒烟（无新 bug）：38 预设切换/7-tap 引擎 DOM（21 feDisp/18 feComposite）/导出三格式/PNG 快照 1.95MB/撤销重做 48↔42/注册→登录→保存预设→删除/390px 零溢出/0 console error；QA 测试账号与 r5probe 残留账号级联清理，库归零
+- 自主规划第九阶段（上轮 worklog 四候选落地为三里程碑）：建 #86/#87/#88 入 Project Todo
+- M1（6185431）：glowOpacity（乘法系数 default 1——存量观感不变）+ glowSpread（default 24）；color.ts scaleColorAlpha()（canvas 参考解析→纯 rgba()，k≥1 短路返回原串保证 SSR 水合字节稳定）；引擎/API/滑杆/分享/封面 1.1×/快照 4× 全链路；**Phase 5 遗留清零——CSS 导出补 edgeBlur ::after 弥散环，磨砂噪点迁根元素 background-image（alpha 烘焙进 feColorMatrix）**
+- M2（2fc41f3）：textures.ts 共享零 JS data-URI——拉丝（各向异性 feTurbulence fx 0.012/fy 0.85 水平条带+近白光泽）与气泡（径向渐变球体偏心高光+亮边缘环，200×200 无缝 8 球）；封面/快照 canvas 近似（LCG 确定性）；样式库 38→44（拉丝铝板/缎面拉丝金/珍珠母贝/深海气泡/香槟气泡/碳酸汽水，材质 15/创意 12）；VLM 视觉实证气泡「3D 球体+亮环+内部高光」拉丝「水平金属条带」
+- M3（2739852）：globals.css @property --glass-rim-angle + 双 keyframes + [data-glass-animated] reduced-motion 守卫；辉光呼吸拆专用层（动画 backdrop 层会连带淡化折射）；rim 渐变切变量角度扫 360°；CSS 导出根 box-shadow 栈 keyframes（仅辉光 alpha 变化）+ @property + reduced-motion 守卫
+- 实施中踩坑即改：MultiEdit 模板字面量部分应用陷阱重现（export.ts 三处不一致态，python assert 逐段修复）；eval 全局 const 重声明报错改 IIFE；agent-browser press PageUp 对 radix 滑杆 +20/次
+- Phase 9 E2E 回归全绿：分享链接深载入 7 新参数逐值精确还原（42/0.7/38/0.6/0.4/0.3/0.45）；撤销 0.3→0.4→undo 0.3；随机器锁定保持（拉丝 0.3/呼吸 0.6）+ 动效参数刻意不随机；保存→DB→载入 EXACT_MATCH；390px/1440px 无溢出；0 console error；数据清理归零
+- 关键动画实证：rim 角度计算样式 518.762°→618.072°（1.5s，62°/s=360°/5.8s 周期公式吻合）；reduced-motion 仿真 matchMedia=true→animationName=none
+- 推送 3 提交 → CI run 38057766353 四门禁全绿 → #86/#87/#88 报告回帖关闭 → Project 三条目 Done
+
+Stage Summary:
+- 第九阶段三里程碑闭环：辉光强度/范围独立可调 / 拉丝+气泡双纹理层+6 新预设（44 款）/ 辉光呼吸+高光流动微动效（含 reduced-motion 尊重）
+- GlassConfig 参数 17→23（+glowOpacity/glowSpread/brushed/bubbles/glowPulse/rimFlow），全部默认值向后兼容（zod default + ?? 回退 + 存量观感不变三重契约）
+- 关键决策：辉光乘法语义而非拆色（存量预设 alpha 各异，乘法保观感）；纹理用 data-URI 背景层而非 SVG filter 引用（引擎与导出同构、Safari/Firefox 安全）；辉光呼吸拆层（opacity 动画不能挂在 backdrop 层）；CSS 导出 frost/brushed/bubbles 统一为根元素 background-image 栈（::before 留给 rim、::after 留给 edgeBlur）
+- 沉淀陷阱：①MultiEdit 对含 \n 转义的模板字面量 old_str 极易部分应用失败——export.ts 类文件一律 python assert+replace；②eval 里 const 声明跨命令残留，断言脚本必须 IIFE；③CSS 导出层分配记忆口诀：root-bg=纹理、::before=rim、::after=edge 环、keyframes=动效
+- GitHub 产物：issues #86-#88 全闭环（报告回帖）、Project 三条目 Done、repo 推进至 2739852（CI 四门禁全绿）
+
+未解决/风险与下一步建议：
+- PR #364 仍待 Ultra-Guru 维护者评审（正常等待）
+- 下轮候选：①拉丝方向参数化（当前固定水平，可加 angle 或跟随 lightAngle）；②气泡上升动画（CSS background-position-y 动画）与气泡大小密度参数；③辉光呼吸与 rimFlow 的预设化（4-6 款动效预设）；④导出 React 组件的动效 demo 页（展示呼吸/流动效果）；⑤第五/六轮深度检查（覆盖 Phase 9 新增约 600 行）
