@@ -15,6 +15,8 @@ import {
   Check,
   Copy,
   GitCompare,
+  FileDown,
+  FileUp,
   ImageDown,
   GripHorizontal,
   GripVertical,
@@ -54,6 +56,7 @@ import {
   decodeConfig,
   hashPayload,
   shareUrl,
+  validateConfigObject,
 } from '@/lib/glass/export'
 
 import { Slider } from '@/components/ui/slider'
@@ -424,15 +427,68 @@ const EXPORT_FORMATS = [
 
 type ExportFormatId = (typeof EXPORT_FORMATS)[number]['id']
 
-/** Phase 2 M2: code export + share-link panel; Phase 6 M1 adds PNG snapshot. */
-function ExportPanel({ config, bg }: { config: GlassConfig; bg: BackgroundOption }) {
+/** Phase 2 M2: code export + share-link panel; Phase 6 adds PNG snapshot & file I/O. */
+function ExportPanel({
+  config,
+  bg,
+  onImportConfig,
+}: {
+  config: GlassConfig
+  bg: BackgroundOption
+  onImportConfig: (cfg: GlassConfig, fileName: string) => void
+}) {
   const [format, setFormat] = useState<ExportFormatId>('css')
   const [copied, setCopied] = useState<string | null>(null)
   const [snapBusy, setSnapBusy] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const current = EXPORT_FORMATS.find(f => f.id === format) ?? EXPORT_FORMATS[0]
   const code = useMemo(() => current.gen(config), [current, config])
   const link = useMemo(() => shareUrl(config), [config])
+
+  const handleDownloadJson = useCallback(() => {
+    try {
+      const blob = new Blob([configToJson(config)], {
+        type: 'application/json',
+      })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `glasslab-config-${Date.now()}.glass.json`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 4000)
+      toast({ title: '配置文件已下载', description: 'glasslab-config-*.glass.json' })
+    } catch {
+      toast({ title: '文件导出失败', description: '请稍后重试', variant: 'destructive' })
+    }
+  }, [config])
+
+  const handleImportFile = useCallback(
+    (file: File) => {
+      const reader = new FileReader()
+      reader.onload = () => {
+        try {
+          const raw: unknown = JSON.parse(String(reader.result))
+          const cfg = validateConfigObject(raw)
+          if (!cfg) throw new Error('invalid')
+          onImportConfig(cfg, file.name)
+        } catch {
+          toast({
+            title: '导入失败',
+            description: '文件不是有效的玻璃配置 JSON',
+            variant: 'destructive',
+          })
+        }
+      }
+      reader.onerror = () => {
+        toast({ title: '文件读取失败', variant: 'destructive' })
+      }
+      reader.readAsText(file)
+    },
+    [onImportConfig]
+  )
 
   const handleSnapshot = useCallback(async () => {
     setSnapBusy(true)
@@ -588,6 +644,52 @@ function ExportPanel({ config, bg }: { config: GlassConfig; bg: BackgroundOption
           )}
           下载 PNG 快照
         </Button>
+      </div>
+
+      <Separator />
+
+      {/* Phase 6 M3: .glass.json file export & import */}
+      <div>
+        <Label className="text-xs">配置文件</Label>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">
+          以 .glass.json 文件存档当前配置，或从文件导入
+        </p>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={handleDownloadJson}
+            data-testid="download-json"
+          >
+            <FileDown className="h-3.5 w-3.5" />
+            导出文件
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => fileInputRef.current?.click()}
+            data-testid="import-json"
+          >
+            <FileUp className="h-3.5 w-3.5" />
+            导入文件
+          </Button>
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json,application/json"
+          className="hidden"
+          aria-label="导入配置文件"
+          data-testid="import-json-input"
+          onChange={e => {
+            const f = e.target.files?.[0]
+            if (f) handleImportFile(f)
+            // Reset so re-selecting the same file re-triggers onChange.
+            e.target.value = ''
+          }}
+        />
       </div>
     </div>
   )
@@ -991,6 +1093,17 @@ export function GlassLab() {
     // pushHistory is a stable []-dependency callback — declaring it is
     // unnecessary and exhaustive-deps stays silent.
   }, [pushHistory])
+
+  const handleImportConfig = useCallback(
+    (cfg: GlassConfig, fileName: string) => {
+      pushHistory()
+      setConfig(cfg)
+      setActivePreset('')
+      setDarkContent(cfg.tintOpacity > 0.3 && isDarkColor(cfg.tint))
+      toast({ title: '已从文件载入配置', description: fileName })
+    },
+    [pushHistory]
+  )
 
   const savePreset = useCallback(async () => {
     const name =
@@ -1686,7 +1799,7 @@ export function GlassLab() {
                   </div>
                 </TabsContent>
                 <TabsContent value="export">
-                  <ExportPanel config={config} bg={bg} />
+                  <ExportPanel config={config} bg={bg} onImportConfig={handleImportConfig} />
                 </TabsContent>
                 <TabsContent value="saved">
                   {/* Phase 4 M1: search + sort header */}

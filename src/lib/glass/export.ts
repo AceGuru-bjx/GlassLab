@@ -142,6 +142,47 @@ export function hashPayload(hash: string): string | null {
 }
 
 /**
+ * Validate an unknown parsed-JSON value as a GlassConfig.
+ * Merges over DEFAULT_CONFIG (forward-compatible), coerces numbers and
+ * validates types; returns null for anything malformed. Shared by the share-
+ * link decoder (decodeConfig) and the .glass.json file import (Phase 6 M3).
+ */
+export function validateConfigObject(raw: unknown): GlassConfig | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const merged: GlassConfig = { ...DEFAULT_CONFIG, ...(raw as object) }
+  // Coerce the numeric surface; any non-finite value poisons the SVG
+  // filter chain, so reject the payload outright.
+  const numKeys = [
+    'refraction',
+    'height',
+    'dispersion',
+    'blur',
+    'saturation',
+    'cornerRadius',
+    'highlight',
+    'lightAngle',
+    'tintOpacity',
+    'elasticity',
+    'frost',
+    'edgeBlur',
+    'vignette',
+  ] as const
+  for (const k of numKeys) {
+    const v = Number(merged[k])
+    if (!Number.isFinite(v)) return null
+    merged[k] = v
+  }
+  const boolKeys = ['depthEffect', 'overLight'] as const
+  for (const k of boolKeys) {
+    if (typeof merged[k] !== 'boolean') return null
+  }
+  if (typeof merged.tint !== 'string' || typeof merged.glow !== 'string') {
+    return null
+  }
+  return merged
+}
+
+/**
  * Decode a share payload back into a GlassConfig.
  * Merges over DEFAULT_CONFIG (forward-compatible), coerces numbers and
  * validates types; returns null for anything malformed — bad links must
@@ -149,39 +190,7 @@ export function hashPayload(hash: string): string | null {
  */
 export function decodeConfig(payload: string): GlassConfig | null {
   try {
-    const raw: unknown = JSON.parse(fromBase64Url(payload))
-    if (typeof raw !== 'object' || raw === null) return null
-    const merged: GlassConfig = { ...DEFAULT_CONFIG, ...(raw as object) }
-    // Coerce the numeric surface; any non-finite value poisons the SVG
-    // filter chain, so reject the payload outright.
-    const numKeys = [
-      'refraction',
-      'height',
-      'dispersion',
-      'blur',
-      'saturation',
-      'cornerRadius',
-      'highlight',
-      'lightAngle',
-      'tintOpacity',
-      'elasticity',
-      'frost',
-      'edgeBlur',
-      'vignette',
-    ] as const
-    for (const k of numKeys) {
-      const v = Number(merged[k])
-      if (!Number.isFinite(v)) return null
-      merged[k] = v
-    }
-    const boolKeys = ['depthEffect', 'overLight'] as const
-    for (const k of boolKeys) {
-      if (typeof merged[k] !== 'boolean') return null
-    }
-    if (typeof merged.tint !== 'string' || typeof merged.glow !== 'string') {
-      return null
-    }
-    return merged
+    return validateConfigObject(JSON.parse(fromBase64Url(payload)))
   } catch {
     return null
   }
