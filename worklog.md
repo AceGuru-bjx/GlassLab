@@ -209,3 +209,28 @@ Stage Summary:
 - 关键决策：颜色组合以 color-mix 为兜底（4/8 位 hex 保留源 alpha 语义）；GET 单条可见性镜像写端点口径（403 而非 404 防枚举歧义）；导出 React 的 css 用 JSON 字符串字面量（正确性优先于可读性）；新效果默认 0 + zod default 双保险兼容存量
 - 沉淀陷阱：CSSOM 读回 url() 带引号（'#id'→url("#id")），DOM 断言 needle 需匹配归一化形式；python heredoc 内 shell 反引号插值是模板字面量补丁的高发事故点——用 repr 逐行核对；bash 后台分组 (&) 会隔离变量赋值
 - Project 44-49 全 Done；下轮候选：多用户协同/更多纹理层/导出含 edgeBlur 的 CSS 方案
+
+---
+Task ID: 10
+Agent: Z.ai Code (main agent)
+Task: 第三轮全面深度检查——五批用户旅程模拟（issues #57–#61）+ 高斯模糊需求删除确认
+
+Work Log:
+- 前置核实：本地落后远程 7+ 提交（二至五阶段全部已在远程闭环，#1–#56 全 closed）→ 硬重置同步至 856d3cd；沙箱重置致 .env/db/node_modules 丢失 → 重建 .env（DATABASE_URL 绝对路径 + NEXTAUTH_SECRET）、bun install 补 next-auth、db push 建库、重启 dev server（turbopack 缓存损坏一度阻塞编译，rm .next/dev/cache/turbopack 解决）
+- 建任务：5 批用户旅程导向检查 issue（#57–#61）全部入 Project 置 Todo；任务正文固化冲突裁决规则（无 bug 以之前为准）与「高斯模糊等新效果需求删除」（#49 已交付部分保留，仅按 bug 口径检查）
+- 全检 1/5（#57 首访与调参台）：26 款预设/分类过滤（26=4+8+7+7）/6 背景切换/拖拽钳制（+1200 意图被钳）/滑杆指针+键盘双路径/撤销重做往返/三新效果 DOM 实装核验（frost feTurbulence×3、edgeBlur blur(10.4px) 蒙版环、vignette 径向渐变——早前 0 命中均为选择器误报）/lightAngle→rim 215° 联动。发现：#62 键盘滑杆调整不入撤销栈（undo 完全旁路 + 键盘值被后续手势吞为基线，Switch 对照组实锤不对称）；#63 分类 chips ARIA tab 契约不完整；#64 .glass-range 疑似死 CSS
+- #62 修复：ConfigPanel 增加 onKeyDownCapture（捕获阶段先于 radix 值更新，检查点必然捕获变更前状态）+ SLIDER_VALUE_KEYS 八键白名单 + 600ms 突发窗口合并长按自动重复；实测 28→30 undo 回 28、8 连按合并为 2 检查点逐步还原、指针路径回归无损
+- #63 修复：chips 补 id/aria-controls=preset-grid，网格补 role=tabpanel+aria-label；实测 5 tab 全关联
+- #64 误报关闭（not_planned）：grep|head -5 截断丢掉 glass-demo-card.tsx:136 真实引用（音量滑杆为原生 input[type=range].glass-range），删除后音量滑杆样式实测丢失 → 立即恢复原状（git 零改动），教训记录：grep 截断输出不可作为定罪依据
+- 提交 92ae4ab（Closes #62 #63）→ CI run 38027586490 success → 报告回帖 → Project 全 Done
+- 全检 2/5（#58 预设管理）：保存（201+封面 JPEG）/载入逐项一致/chip 语义（#55 保持）/收藏乐观+落库/搜索防抖+空态/排序三态/删除同步/生成器锁定保持+变体 ±15% 带内断言+入撤销栈——0 bug；观察项：名称排序为码点序非拼音序（SQLite 无 ICU，维持现状）；「排序后列表空」经查为 agent-browser fill 空串与受控输入失联工具伪象（原生 setter 复测排序正确）
+- 全检 3/5（#59 认证会话）：非法邮箱 HTML5 拦截/短密码内联 alert/注册自动登录/登出重登录列表切换/匿名 GET·DELETE·PATCH 私有预设全 403（#51 保持）/stale JWT 降级——0 bug；stale JWT 徽章展示性不一致做完整安全面分析（写路径存在性校验 + onDelete:Cascade 级联 → 无越权路径），依冲突规则维持既有实现
+- 全检 4/5（#60 媒体对比）：魔数嗅探（GIF89a 魔数文本文件被接受=设计范围，坏图舞台空白但降级优雅）/合法 PNG 自动选中渲染/对比分割线拖拽 5%~95% 双向钳制/键盘 ±2·Shift±10（5→15 无歧义断言）·Home·End/目标切换/关闭完全恢复（clip 残留 0）/删除回退——0 bug
+- 全检 5/5（#61 导出响应式）：CSS 导出含三新效果/React 无裸反引号（#54 保持）/JSON 17 键合法/分享链接 374 字符深载入逐值精确还原（ROUND_TRIP_MATCH=True）/坏 hash 两种载荷容错/390px 零溢出/footer 推底 gap=0/桌面三栏/控制台 0 error/dev.log 零运行时错误——0 bug；观察项：无头探针环境剪贴板双路径失败（execCommand 实证返回 false，应用失败 toast 为设计内降级，真实浏览器主路径可用）
+
+Stage Summary:
+- 第三轮全面深度检查收官：5 批用户旅程（首访调参/预设管理/认证会话/媒体对比/导出响应式）全流程模拟真实用户操作
+- 总收成：2 真实缺陷修复（#62 #63，commit 92ae4ab CI 绿）+ 1 误报澄清（#64）+ 5 观察项记录（均依「无 bug 以之前为准」维持既有实现并附实证分析）
+- 「高斯模糊等新效果」功能需求按本轮指令删除：未做任何新功能开发，#49 已交付的 frost/edgeBlur/vignette 保留并按 bug 口径复核（三效果实装、导出、封面全链路核验通过）
+- 沉淀陷阱：①grep|head 截断输出会制造假死代码定罪——删除类清理必须全量核对引用；②agent-browser fill 空串对受控输入失联（须原生 setter+input 事件）；③agent-browser keydown 修饰键跨 CLI 调用不保持（组合键 press Shift+X 是可靠路径）；④eval 探针选择器三度误报（vignette 样式归一化丢 ellipse at center、url 背景过滤条件过严、bgStyle 挂在 stage 根）——DOM 断言前先枚举全量再过滤；⑤prisma db execute 需显式 --schema 否则静默打印 help
+- GitHub 产物：issues #57–#64 全闭环（报告回帖）、Project 条目全 Done、repo 推进至 92ae4ab、CI 四阶段全绿
