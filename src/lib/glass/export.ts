@@ -250,9 +250,15 @@ export function shareUrl(config: GlassConfig): string {
   return `${window.location.origin}/#g=${toBase64Url(JSON.stringify(config))}`
 }
 
-/** Extract the `#g=` payload from a URL hash, if present. */
+/** Extract the `#g=` payload from a URL hash, if present.
+ *
+ * Accepts both the canonical unpadded base64url this app emits and padded
+ * standard base64 (`=` tail, up to 2 chars) that third-party tools (btoa
+ * with a JSON length not divisible by 3) produce — `=` is legal inside a
+ * URL fragment and `fromBase64Url`→`atob` handles padding natively, so the
+ * only thing that can reject such links is this regex (issue #96). */
 export function hashPayload(hash: string): string | null {
-  const m = hash.match(/^#g=([A-Za-z0-9_-]+)$/)
+  const m = hash.match(/^#g=([A-Za-z0-9_-]+={0,2})$/)
   return m ? m[1] : null
 }
 
