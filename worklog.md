@@ -587,3 +587,39 @@ Stage Summary:
 - glare 的 cover/snapshot canvas 近似未做（掠光是瞬态运动，静态封面呈现一道静止亮带可能反而误导——已裁决跳过；若未来做可取扫掠中点位置）
 - dragSquash 的对角拉伸是轴向近似（cos²/sin² 分配而非真旋转——旋转会使玻璃内容倾斜，裁决不旋转）；如需真各向异性可做「拖拽方向旋转位移贴图」候选
 - 下轮候选：①glareAngle 参数化（当前固定 115°，可跟随 lightAngle 或独立角度）；②凝雾水珠层（condensation droplets——真实感雾气水珠纹理，边缘聚集）；③导出 React 组件的动效 demo 页（Phase 9 遗留候选，连续 7 阶段未做）；④快捷键自定义的进阶（双键组合支持）；⑤第十一轮深度检查（覆盖 Phase 15+16 新增约 1100 行——连续两阶段未做深度检查，按节奏应优先）
+---
+Task ID: 23
+Agent: Z.ai Code (main agent)
+Task: 状态评估轮——QA 冒烟全绿（无新 bug）后执行第十一轮深度检查（发现并修复 #116/#117）+ 自主开发第十七阶段「凝雾与光带」：凝雾水珠层（#120）/ glareAngle 参数化（#121）/ 导出实时预览（#122）
+
+Work Log:
+- 前置核实：worklog Task 22 闭环态；git 307031b 与远程同步（本地多 1 个仅 download 图片的提交）、CI 绿、0 open issue、dev server 200、DB 全零、PR #364 待审正常
+- agent-browser 全站 QA 冒烟 11 项全绿：71 预设/39 滑杆（role=slider 非 input[type=range]）/21 feDisp+18 feComp/深海涌动双动画 2.3s+4.4s/水润果冻 jelly combo 7 层/Z·V·?·Esc 快捷键/导出 CSS·React·JSON 三格式/深链 glare 0.4 还原且动画活体/390px+1280px 文档级零溢出（7 个「溢出」元素在合法横滚容器内）/0 console error/API 回路（POST 201→DELETE 200、glare 1.5 与 pink 枚举 400、清理归零）
+- **环境陷阱甄别（非产品缺陷）**：glare 扫掠采样恒 0% → 页面样式表缺 `glass-glare-sweep` keyframes → Task 22 记录过的 Turbopack CSS 块陈旧（globals.css 内容级修改 + reload 触发重建后恢复：43.5%→8.1%→0% 停驻活体）——QA 前若遇 keyframes 缺失先怀疑 dev 环境而非产品代码
+- 第十一轮深度检查（Phase 15+16 全 diff 894 行 + lint/tsc 干净 + 导出矩阵 14/14）发现 2 缺陷：
+  1) #116 换键武装态泄漏：remap 捕获监听器只依赖 remapping 状态不感知 Dialog 生命周期 → 外点关闭对话框后武装态残留 → 下一任意单键被静默吞掉并改写绑定（实测 undo 被改为 x 并写入 localStorage）
+  2) #117 导出 glare 层序反转：CSS background-image 列表首位才是顶层，glare 被推到末位=垫底，引擎 DOM 中却绘制于全部纹理层之上（#108 同类 parity 缺口）
+- 修复 fe97596（2 文件 +39/-21）：#116 Dialog onOpenChange 关闭分支统一 setRemapping(null)（覆盖外点/✕/Esc 全路径）；#117 glare 推入 bgImages 首位（索引派生列表自动重键，8 断言矩阵验证）
+- 验证：#116 关闭后按键 localStorage 保持 null + z 撤销照常；#117 层序/重复/位置列表逐项断言；CI 四门禁全绿 → 报告回帖 + Project Done
+- Phase 17 规划「凝雾与光带」三 milestone：建 #120/#121/#122 入 Project Todo（⚠️ bash 循环创建 issue 时响应解析失败但 issue 已建立——产生重复 #118/#119，已标注 not_planned 关闭；**教训：用 python urllib 而非 bash 循环创建 issue**）
+- M1（#120）凝雾水珠：`droplets` 0..1 + `dropletSize` 0.5..2 默认 0（存量字节级不变）；**单张拉伸层**（320×200 viewBox + background-size 100% 100%）——边缘聚集是卡片相对的，重复贴图无法表达（放弃 tile 的根因注释在案）；LCG 确定性布局（seed 20261011）+ 边缘加权接受概率 0.1+0.9·(1-t)^1.6 + 边缘珠 32% 椭圆聚并流痕 + 锐利偏心高光核/冷调珠身/亮边三停渐变；引擎层位于 sparkle 之上 glare 之下；canvas 近似共享 dropletLayout（cover/snapshot 同源）；zod + 深链 + RANDOM_RANGES [0,0.55]/[0.6,1.5]
+- M1 附带（#117 类全量 parity 修正）：导出纹理栈整体重排 `glare > droplets > sparkle×2 > bubbles > brushed > frost`——深检 #117 分析中发现 frost/brushed/bubbles/sparkle 四层在引擎与导出间全部镜像（自 Phase 5/9/14 起的存量缺口），本轮一并修正为引擎同序
+- M2（#121）光带角度：`glareAngle` 0..360 默认 115（Phase 16 硬编码对角线，存量字节级等价）；引擎/导出同源 linear-gradient(${glareAngle}deg)；滑杆 step 5（brushedAngle 惯例）；RANDOM_RANGES [0,360]
+- M3（#122）导出实时预览：导出面板「预览导出效果」按钮 → Dialog + `<iframe sandbox="">`（无脚本，零执行面）+ srcDoc = configToCss(config) + 舞台脚手架（图片背景经 new URL(bg.url, origin) 解析——srcdoc 无 base URL）；useCallback 惰性构建保 SSR 安全；Phase 9 遗留候选（连续 8 阶段）闭环
+- 新预设：晨雾凝珠（材质，droplets 0.7）/ 冰镇汽水（创意，水珠+气泡上升复合）/ 寒潭镜面（光影，水珠+扫掠 95°）→ 71→74 款
+- E2E 验证矩阵全绿：bun 导出矩阵 21/21（全栈层序/双 no-repeat/size 100% 100%/rise -200px 与 drift calc 落位新索引 4/零残留/确定性/74 预设/validate 新键接受与 NaN 拒绝）；引擎层 100% 100% + no-repeat + 5KB URI；**VLM 三重实证水珠（可见/边缘聚集/高光）**；glareAngle 滑杆 115→150 渐变实时跟随；预览 iframe VLM 实证（半透明玻璃卡片/文字清晰/渐变舞台）；API（新字段 201/legacy 默认 0·1·115/越界 droplets 1.5、dropletSize 3、glareAngle 400 全 400）；深链还原 droplets 0.42+dropletSize 1.3+glareAngle 95；保存封面 canvas 近似含水珠（低分辨率封面 VLM 边缘聚集不可辨——全分辨率舞台已三重确认，共享布局代码，非缺陷）；随机 6 连发 droplets 0.1∈[0,0.55] glareAngle 156∈[0,360]；对比/撤销/画廊 74 块；0 console error；390px 零溢出
+- 提交 aaf22fa 推送 → CI 四门禁全绿 → #120/#121/#122 自动关闭 + 验证报告回帖 + Project 三条目 Done；重复 issue #118/#119 标注 not_planned 关闭；测试数据清理归零
+
+Stage Summary:
+- 本轮双产出：第十一轮深度检查（#116 换键武装态泄漏 + #117 glare 层序反转，全闭环）+ Phase 17 三里程碑（#120/#121/#122 全闭环）
+- GlassConfig 参数 52→55（+droplets/dropletSize/glareAngle），全部默认值后向兼容（droplets 0=无层、glareAngle 115=字节等价）
+- 样式库 71→74 款（晨雾凝珠/冰镇汽水/寒潭镜面）；滑杆 39→42
+- 关键决策：①水珠用单张拉伸层而非重复贴图（卡片相对的边缘聚集物理上不可 tile 化）；②水珠置于 sparkle 之上 glare 之下（水附着表面、光带掠过水上）；③导出纹理栈全量重排为引擎同序（#117 深挖出的存量四层镜像缺口一并修正）；④预览 iframe sandbox="" 零脚本（纯 CSS 渲染面）+ srcdoc 图片背景需绝对 URL（srcdoc 无 base URL）
+- 沉淀陷阱：①bash 循环创建 GitHub issue 时 curl 响应含中文导致 python 解析报错但 issue 已建——重复编号善后成本 > 改用 python urllib 的一次性成本；②Turbopack CSS 块陈旧会以「keyframes 缺失→动画静止」的假象出现——先用 document.styleSheets 枚举 keyframes 判别环境与产品；③agent-browser eval 的 IIFE 返回字符串里 rg/grep 输出层会吃掉 `[he` 类序列（误判源码损坏——用 Read 工具复核）；④radix Dialog 外点关闭需派发 pointerdown（click 不触发 DismissableLayer）；⑤预览 srcdoc 中的图片必须经 new URL(bg.url, window.location.origin) 绝对化
+- GitHub 产物：repo 推进至 aaf22fa（CI 四门禁全绿，3 commits：fe97596 检查修复 + aaf22fa Phase 17）、issues #116/#117/#120/#121/#122 全闭环（报告回帖）、#118/#119 重复关闭、Project 五条目 Done、PR #364 待审（正常等待）
+
+未解决/风险与下一步建议:
+- PR #364 仍待 Ultra-Guru 维护者评审（正常等待，无新评论）
+- 水珠层的 cover/snapshot 低分辨率下边缘聚集不可辨（3px 级珠点在 400×240 JPEG 上接近可视阈值）——共享确定性布局代码已保证几何一致，如需强化可提高封面水珠对比度
+- 单张拉伸层的珠体会随非等比卡片拉伸变形（已裁决为特性：水随玻璃形变）；如需保形可候选「封面高对比烘焙」或「双贴图混合」
+- 下轮候选：①水珠滑落动画（droplets 的竖向缓滑——需 per-bead 动画，单层 SVG 内无法实现，或需 canvas/WebGL 路线评估）；②快捷键双键组合支持（Phase 16 遗留）；③预览面板增强（React 导出的实时渲染——需 CDN React UMD，离线环境受限）；④第十二轮深度检查（覆盖 Phase 17 新增 ~400 行，按节奏可延后一轮）；⑤预设收藏流（schema 已有 favorite 字段，UI 未接入收藏筛选——GET /api/presets?sort=favorites 已支持）
