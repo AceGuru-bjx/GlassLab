@@ -2738,7 +2738,17 @@ export function GlassLab() {
       <AuthDialog open={authOpen} onOpenChange={setAuthOpen} />
 
       {/* ---------- Phase 13 M3: shortcut help dialog (Phase 16 M2: remap) ---------- */}
-      <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
+      {/* #116: closing the dialog by ANY path (outside click, titlebar ✕,
+          Esc beyond the remap-capture) must disarm a pending remap — the
+          armed capture listener would otherwise silently swallow and bind
+          the next single keystroke with no visible UI hint. */}
+      <Dialog
+        open={helpOpen}
+        onOpenChange={open => {
+          setHelpOpen(open)
+          if (!open) setRemapping(null)
+        }}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-1.5 text-sm">
