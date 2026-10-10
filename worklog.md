@@ -555,3 +555,35 @@ Stage Summary:
 - iriFlow 的 lightFollow 联动：起角锚定 lightAngle 且 lightFollow 实时旋转——两系统同时驱动 conic 角度时扫动基座跟随指针（已验证数学正确，但观感待用户反馈）
 - 软糖弹跳的拖拽方向感知形变（拉伸方向跟随拖拽矢量——squash & stretch 各向异性）为候选增强
 - 下轮候选：①第十一轮深度检查（覆盖 Phase 15 新增 ~390 行——按节奏应优先）；②星芒拖尾/流星模式（twinkle 之外的长周期划过）；③虹彩与 tint 联动（光谱带从 tint 色相展开而非固定 8 档）；④快捷键自定义面板（Phase 13 遗留候选）；⑤导出 React 组件动效 demo 页（Phase 9 遗留候选）
+---
+Task ID: 22
+Agent: Z.ai Code (main agent)
+Task: 状态评估轮——QA 冒烟全绿（无新 bug）+ Phase 15 代码快速审查无缺陷后自主开发第十六阶段「形变与镜面」：拖拽方向感知形变（#112）/ 快捷键自定义面板（#113）/ 反光扫掠（#114）+ 发现并根因修复 #115
+
+Work Log:
+- 前置核实：worklog Task 21 闭环态；git d64d682 同步、CI 三门禁绿、0 open issue、dev server 200、PR #364 open 正常等待
+- agent-browser QA 冒烟 13 项全绿（无新 bug）：68 预设/37 滑杆/21 feDisp+18 feComp/深海涌动双动画 2.3s+4.4s 基线吻合/果冻 combo 合并器实证（glass-jelly, glass-glow-pulse 等 5 类复合）/iri-flow 4.3s 活体角度 173°/星芒双种子半相位/V 视图往返/Z 撤销/? 帮助 8 kbd/导出 CSS 4473 字符+React 6080/分享链接 toast/390px+1280px 零溢出/深链 9 参数精确还原/0 error
+- Phase 15 代码快速审查（ed2e103 全 diff + lint/tsc）：beforeFlowRule 三分支正确/sparkle delay 折入简写的 per-animation 映射正确/validateConfigObject 枚举回退正确——无缺陷
+- 自主规划 Phase 16「形变与镜面」三里程碑：建 #112/#113/#114 入 Project（Project ID 为 PVT_kwHOFBkHJ84BmIGA——worklog 旧记录的 ID 已失效需重查）
+- M1（#112）拖拽方向感知形变：GlassConfig +dragSquash 0..1 默认 0；framer onDrag 速度矢量→内层包装 motion.div 的 useSpring scaleX/scaleY 各向异性对（外层拖拽/whileDrag/dragBounce 完全不动）；cos²/sin² 轴向分配 + 0.6 权重垂直补偿（近似保体积）；2600px/s 饱和、振幅上限 22%×dragSquash；三个可拖元素统一接入；恒等时 framer 不发 transform（零成本）；RANDOM_RANGES [0,0]；新预设太妃拉糖
+- M2（#113）快捷键自定义：KEYBIND_ACTIONS 5 动作（undo/random/view/compare/help）可重映射；捕获阶段监听器先于全局快捷键层吞键（capture+stopImmediatePropagation）；冲突检测 toast + 保持武装可续试；Esc 取消/无效键拒绝（仅字母数字）；Shift+重做跟随撤销键；localStorage glasslab-keybindings-v1 挂载后恢复（Phase 11 hydration 模式）；重置默认按钮；帮助 Dialog 每行换键按钮 + 自定义徽章 + armed 高亮
+- M3（#114）反光扫掠：GlassConfig +glare 0..1 默认 0；115° 斜向镜面高光带（250% 宽 no-repeat gradient）；background-position-x 100%→0%（两端屏外循环重启不可见）+ 45% 扫过/55% 停驻；引擎独立层 + combo() 与 jelly 复合；导出注册 <percentage> 变量通道 --glass-glare-x（静态 per-layer position-x 列表引用变量 + rise 切 -y longhand + drift per-layer x 列表透传变量——三通道无踩踏，#108 模式延伸）；motionSpeed 除法/motionGuard/isMotionConfig 联锁；新预设奢侈品橱窗（光影）+极光掠影（创意）；68→71 款
+- 实施中发现并即修 1 缺陷 #115：Header 阶段徽章停在 Phase 14（Phase 15 只更了 Footer——#92 同类重演）→ 根因修复 PHASE_LABEL/PHASE_FOOTER 常量对（一处声明两处派生，今后永不失步）
+- 实施中即查即改 4 起：①MultiEdit 常量误插 coverSpec 函数体中间（立即修复）；②owner2Desc 未定义引用（改 KEYBIND_ACTIONS.find 查找）；③tsc/lint 全程干净
+- E2E 验证矩阵全绿：M1 真实拖拽 matrix(1.00642,0,0,0.996153) 水平拉伸/竖向主导 scaleY 1.0012 轴向归属正确/释放 1s 后 inner transform=none 恒等复位/dragSquash=0 全程无 transform；M2 Q 重映射生效（29→28）+ 旧 Z 失效 + 冲突 toast 保持武装 + Esc 取消 + reload 持久化 + 重置清 storage；M3 活体扫掠 0.6s→89.97%/6.8s→新周期/8.8s→0.49% 停驻（周期 6.2s/4.7s/4.0s 逐值精确）+ 7 类动画终极复合（jelly×glow/rise+drift/sparkle×2/glare/iri/rim 同卡片）+ bubble 层实时上升漂移；导出 bun 矩阵 18/18（glare=0 字节级零残留 + 结构完整 + rise 联锁 + drift 透传）；导出面板 6 结构断言；深链 glare 0.66+dragSquash 0.7 还原；API（legacy 201 默认/新字段 201/glare 1.5 与 dragSquash -1 均 400）；reduced-motion 归零；动效徽章；390px 71 预设/39 滑杆/零溢出；VLM 实证「斜向白色高光亮带位于卡片表面中部区域，并非仅贴着边缘」
+- **hydration 错误排查**：一次 reload 出现 filter useId 不匹配（lg-Ra7kin vs lg-R18ui）→ stash 对照二分定位（pre-Phase16 3/3 干净 / Phase16 7/7 干净 / 中和 style 表达式亦干净）→ 结论：dev 模式重编译竞态（触发 CSS chunk 重建后的首次 SSR vs 客户端 bundle 短暂失步），非产品缺陷，不可复现
+- 提交 9db41ac 推送 → CI 四门禁全绿（Standalone smoke/Build/Lint/Typecheck）→ #112-115 自动关闭 + 验证报告回帖 → Project 四条目 Done（#115 需先补加入 Project）
+
+Stage Summary:
+- 第十六阶段三里程碑 + 1 根因修复全闭环：squash&stretch 拖拽形变 / 快捷键自定义（重映射+冲突+持久化）/ 反光扫掠（引擎与导出同构的变量通道）/ Header 徽章常量化
+- GlassConfig 参数 49→52（+dragSquash/glare），全部默认值后向兼容（glare=0 与 dragSquash=0 均字节级零残留）
+- 样式库 68→71 款（太妃拉糖/奢侈品橱窗/极光掠影）；动效徽章 17→20；滑杆 37→39
+- 关键决策：①squash 用「内层包装 motion.div + useSpring 对」而非改外层 whileDrag（外层拖拽/缩放/回弹弹簧完全不动，M1 与 dragBounce 天然正交）；②重映射监听器用 capture-phase + stopImmediatePropagation 抢在全局快捷键层之前（两个 window 监听器的时序问题）；③glare 导出通道用注册 <percentage> 变量而非直接动画 background-position-x（与 drift 的 per-layer x 列表正交复合——drift 透传 var、rise 切 longhand，三动画共存无踩踏）；④PHASE_LABEL 常量化根除 #92/#115 类文案失步
+- 沉淀陷阱：①**Turbopack CSS chunk 陈旧**——globals.css 加 keyframes 后浏览器拿不到，touch layout.tsx（mtime）无效，必须内容级修改（加注释）才触发重建，重建后还需 reload；②agent-browser drag 的目标是选择器不是坐标（drag <src> <dst-selector>，可自建 fixed marker div 作目标）；③**framer 合成 pointer 事件可穿透**（dispatchEvent 在卡片元素上 pointerdown + window pointermove 能启动手势）但零时间戳使速度异常，且 pointerup 缺失会卡 whileDrag 态——测试后须 reload 复位；④agent-browser media 模拟命令是 `set media light reduced-motion`（非 `media`/`emulate`）；⑤set viewport 后 close+open 偶发 about:blank（老陷阱重演——navigate 强制恢复）；⑥一次性的 hydration useId 不匹配在 dev 重编译后首渲染可出现（stash 对照 3+7 次干净判定为竞态而非产品缺陷）
+- GitHub 产物：repo 推进至 9db41ac（CI 四门禁全绿）、issues #112-115 全闭环（验证报告回帖）、Project 四条目 Done、PR #364 待审（正常等待）
+
+未解决/风险与下一步建议:
+- PR #364 仍待 Ultra-Guru 维护者评审（正常等待，无新评论）
+- glare 的 cover/snapshot canvas 近似未做（掠光是瞬态运动，静态封面呈现一道静止亮带可能反而误导——已裁决跳过；若未来做可取扫掠中点位置）
+- dragSquash 的对角拉伸是轴向近似（cos²/sin² 分配而非真旋转——旋转会使玻璃内容倾斜，裁决不旋转）；如需真各向异性可做「拖拽方向旋转位移贴图」候选
+- 下轮候选：①glareAngle 参数化（当前固定 115°，可跟随 lightAngle 或独立角度）；②凝雾水珠层（condensation droplets——真实感雾气水珠纹理，边缘聚集）；③导出 React 组件的动效 demo 页（Phase 9 遗留候选，连续 7 阶段未做）；④快捷键自定义的进阶（双键组合支持）；⑤第十一轮深度检查（覆盖 Phase 15+16 新增约 1100 行——连续两阶段未做深度检查，按节奏应优先）
