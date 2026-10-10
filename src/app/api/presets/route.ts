@@ -71,6 +71,15 @@ const glassConfigSchema = z.object({
   bubbleSize: z.number().min(0.4).max(2.2).default(1),
   bubbleDensity: z.number().min(0.3).max(2.5).default(1),
   bubbleRise: z.number().min(0).max(1).default(0),
+  // Phase 11 M1: directional cast shadow — defaults keep pre-Phase-11
+  // payloads (older clients and stored rows) rendering identically.
+  shadowIntensity: z.number().min(0).max(1).default(0),
+  shadowDistance: z.number().min(0).max(40).default(14),
+  shadowSoftness: z.number().min(0).max(60).default(28),
+  // Phase 11 M2: interactive light states — export-safe booleans, defaults
+  // keep stored rows and older clients identical (follow features off).
+  lightFollow: z.boolean().default(false),
+  brushedFollow: z.boolean().default(false),
   edgeBlur: z.number().min(0).max(1).default(0),
   vignette: z.number().min(0).max(1).default(0),
 })

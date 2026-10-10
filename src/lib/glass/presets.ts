@@ -61,6 +61,16 @@ export interface GlassConfig {
   bubbleDensity: number
   /** Phase 10 M2: bubble rise speed — 0=off, 1=fastest (period 8s→1.5s) */
   bubbleRise: number
+  /** Phase 11 M1: directional cast shadow intensity, 0..1 (0 = off) */
+  shadowIntensity: number
+  /** Phase 11 M1: cast shadow offset distance in px */
+  shadowDistance: number
+  /** Phase 11 M1: cast shadow feather radius in px */
+  shadowSoftness: number
+  /** Phase 11 M2: pointer becomes the light source (stage interactive) */
+  lightFollow: boolean
+  /** Phase 11 M2: brushed streaks stay perpendicular to the light */
+  brushedFollow: boolean
   /** Phase 5: progressive gaussian blur ring at the glass edges, 0..1 */
   edgeBlur: number
   /** Phase 5: radial corner darkening (vignette), 0..1 */
@@ -70,6 +80,20 @@ export interface GlassConfig {
 export type GlassCategory = '经典' | '材质' | '光影' | '创意'
 
 export const CATEGORIES: readonly GlassCategory[] = ['经典', '材质', '光影', '创意']
+
+/** Cross-cutting filter value for the category chips (Phase 11 M3). */
+export type CategoryFilter = '全部' | GlassCategory | '动效'
+
+/**
+ * Phase 11 M3: a preset carries motion when any animation parameter is on
+ * (glow breathing / rim flow / bubble rise). Used for the「动效」badge and
+ * the cross-category filter chip.
+ */
+export function isMotionConfig(c: GlassConfig): boolean {
+  return (
+    (c.glowPulse ?? 0) > 0.01 || (c.rimFlow ?? 0) > 0.01 || (c.bubbleRise ?? 0) > 0.01
+  )
+}
 
 export interface GlassPreset {
   id: string
@@ -109,6 +133,11 @@ export const DEFAULT_CONFIG: GlassConfig = {
   bubbleSize: 1,
   bubbleDensity: 1,
   bubbleRise: 0,
+  shadowIntensity: 0,
+  shadowDistance: 14,
+  shadowSoftness: 28,
+  lightFollow: false,
+  brushedFollow: false,
   edgeBlur: 0,
   vignette: 0,
 }
@@ -1167,6 +1196,87 @@ export const PRESETS: GlassPreset[] = [
       glow: 'rgba(251,191,36,0.3)',
       glowSpread: 26,
       vignette: 0.25,
+    },
+  },
+  // ---------------- Phase 11: directional-shadow showcase ----------------
+  {
+    id: 'morning-float',
+    name: '晨光悬浮',
+    desc: '清晨光从右上来，卡片浮起',
+    swatch: 'linear-gradient(200deg,#fff7ed,#fed7aa 55%,#f97316)',
+    category: '经典',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 26,
+      height: 40,
+      dispersion: 0.3,
+      blur: 3,
+      saturation: 125,
+      cornerRadius: 24,
+      tint: '#ffedd5',
+      tintOpacity: 0.1,
+      highlight: 0.9,
+      highlightColor: '#fff7ed',
+      lightAngle: 30,
+      shadowIntensity: 0.55,
+      shadowDistance: 20,
+      shadowSoftness: 34,
+      glow: 'rgba(255,237,213,0.18)',
+      glowSpread: 18,
+    },
+  },
+  {
+    id: 'dusk-silhouette',
+    name: '暮色剪影',
+    desc: '低角度逆光，长影拖曳',
+    swatch: 'linear-gradient(340deg,#1e1b4b,#c2410c 62%,#fdba74)',
+    category: '光影',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 30,
+      height: 46,
+      dispersion: 0.42,
+      blur: 6,
+      saturation: 135,
+      cornerRadius: 18,
+      tint: '#312e81',
+      tintOpacity: 0.26,
+      highlight: 0.95,
+      highlightColor: '#fdba74',
+      lightAngle: 285,
+      shadowIntensity: 0.7,
+      shadowDistance: 32,
+      shadowSoftness: 46,
+      vignette: 0.32,
+    },
+  },
+  {
+    id: 'levitating-isle',
+    name: '悬浮岛',
+    desc: '顶光直射，深影沉底',
+    swatch: 'radial-gradient(circle at 50% 18%,#e0f2fe,#38bdf8 55%,#0c4a6e)',
+    category: '创意',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 32,
+      height: 48,
+      dispersion: 0.4,
+      blur: 4,
+      saturation: 138,
+      cornerRadius: 28,
+      tint: '#0c4a6e',
+      tintOpacity: 0.2,
+      highlight: 1,
+      lightAngle: 0,
+      shadowIntensity: 0.6,
+      shadowDistance: 26,
+      shadowSoftness: 40,
+      bubbles: 0.3,
+      bubbleSize: 0.7,
+      bubbleDensity: 0.8,
+      glow: 'rgba(125,211,252,0.25)',
+      glowSpread: 30,
+      vignette: 0.22,
     },
   },
 ]

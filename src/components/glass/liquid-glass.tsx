@@ -256,6 +256,11 @@ function LiquidGlassImpl({
   const bubbles = Math.max(0, Math.min(1, config.bubbles ?? 0))
   // Phase 10 M1/M2: parametric textures — direction, scale, count, motion.
   const brushedAngle = Math.max(0, Math.min(360, config.brushedAngle ?? 0))
+  // Phase 11 M2: brushedFollow keeps the streaks perpendicular to the light
+  // (metal highlights run across the grain of the light direction).
+  const effectiveBrushedAngle = config.brushedFollow
+    ? (lightAngleDeg + 90) % 360
+    : brushedAngle
   const bubbleSize = Math.max(0.4, Math.min(2.2, config.bubbleSize ?? 1))
   const bubbleDensity = Math.max(0.3, Math.min(2.5, config.bubbleDensity ?? 1))
   const bubbleRise = Math.max(0, Math.min(1, config.bubbleRise ?? 0))
@@ -268,6 +273,22 @@ function LiquidGlassImpl({
     config.glow && config.glow !== 'transparent'
       ? scaleColorAlpha(config.glow, glowOpacity)
       : null
+  // ---- Phase 11 M1: directional cast shadow ----
+  // The rim gradient (linear-gradient θ, bright 0%) puts its bright edge
+  // opposite the θ direction; the shadow therefore falls *along* θ:
+  //   dx = sin(θ)·distance, dy = -cos(θ)·distance   (CSS y grows downward)
+  // Shadow direction tracks lightAngle in real time — including when M2's
+  // lightFollow rotates the light with the pointer.
+  const shadowIntensity = Math.max(0, Math.min(1, config.shadowIntensity ?? 0))
+  const shadowDistance = Math.max(0, Math.min(40, config.shadowDistance ?? 14))
+  const shadowSoftness = Math.max(0, Math.min(60, config.shadowSoftness ?? 28))
+  const shadowRad = (lightAngleDeg * Math.PI) / 180
+  const shadowDx = Math.sin(shadowRad) * shadowDistance
+  const shadowDy = -Math.cos(shadowRad) * shadowDistance
+  const castShadow =
+    shadowIntensity > 0.01
+      ? `${shadowDx.toFixed(1)}px ${shadowDy.toFixed(1)}px ${shadowSoftness.toFixed(1)}px rgba(15, 23, 42, ${(0.5 * shadowIntensity).toFixed(3)})`
+      : ''
   // ---- Phase 9 M3: motion system ----
   // Glow breathing: the shadow moves to a dedicated layer whose opacity
   // oscillates (animating the backdrop layer would fade the refraction).
@@ -462,14 +483,25 @@ function LiquidGlassImpl({
           // host into a backdrop root and break the refraction sampling).
           // Phase 9: radius/spread and intensity are independent params; with
           // glowPulse on, the shadow moves to its own breathing layer below.
-          boxShadow: !glowAnimated && glowColor
-            ? `0 0 ${glowSpread}px ${(glowSpread / 12).toFixed(1)}px ${glowColor}`
+          // Phase 11: directional cast shadow stacks behind the glow — the
+          // shadow tracks lightAngle (opposite the fresnel bright edge).
+          boxShadow: !glowAnimated && (glowColor || castShadow)
+            ? [
+                castShadow || undefined,
+                glowColor
+                  ? `0 0 ${glowSpread}px ${(glowSpread / 12).toFixed(1)}px ${glowColor}`
+                  : undefined,
+              ]
+                .filter(Boolean)
+                .join(', ')
             : undefined,
         }}
       />
 
       {/* Phase 9 M3: breathing glow — dedicated shadow-only layer whose
-          opacity oscillates; box-shadow follows the synced border-radius. */}
+          opacity oscillates; box-shadow follows the synced border-radius.
+          Phase 11: the static cast shadow stays on the backdrop layer above
+          (it must not breathe with the glow). */}
       {glowAnimated && (
         <div
           aria-hidden
@@ -479,6 +511,19 @@ function LiquidGlassImpl({
             ...radiusStyle(),
             boxShadow: `0 0 ${glowSpread}px ${(glowSpread / 12).toFixed(1)}px ${glowColor}`,
             animation: `glass-glow-pulse ${glowPulsePeriod}s ease-in-out infinite alternate`,
+          }}
+        />
+      )}
+
+      {/* Phase 11 M1: cast-shadow fallback — when glow breathing owns the
+          animated layer, the directional shadow still needs a home. */}
+      {glowAnimated && castShadow && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            ...radiusStyle(),
+            boxShadow: castShadow,
           }}
         />
       )}
@@ -546,14 +591,15 @@ function LiquidGlassImpl({
 
       {/* Phase 9 M2: brushed-metal streaks — anisotropic feTurbulence
           data-URI tiling (zero-JS, Safari/Firefox-safe, export-identical).
-          Phase 10 M1: brushedAngle rotates the tiling grid in-pattern. */}
+          Phase 10 M1: brushedAngle rotates the tiling grid in-pattern.
+          Phase 11 M2: brushedFollow derives the angle from the light. */}
       {brushed > 0.01 && (
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0"
           style={{
             ...radiusStyle(),
-            backgroundImage: `url("${brushedDataUri(brushed * 0.4, brushedAngle)}")`,
+            backgroundImage: `url("${brushedDataUri(brushed * 0.4, effectiveBrushedAngle)}")`,
             backgroundSize: '240px 240px',
           }}
         />

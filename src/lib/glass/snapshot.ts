@@ -160,6 +160,24 @@ export async function generateGlassSnapshot(
       ctx.restore()
     }
 
+    // Phase 11 M1: directional cast shadow (4× the stage scale, direction
+    // along lightAngle — same canvas-coord math as the cover generator).
+    const shadowIntensity = Math.max(0, Math.min(1, config.shadowIntensity ?? 0))
+    if (shadowIntensity > 0.01) {
+      const shadowDistance = Math.max(0, Math.min(40, config.shadowDistance ?? 14))
+      const shadowSoftness = Math.max(0, Math.min(60, config.shadowSoftness ?? 28))
+      const rad0 = (config.lightAngle * Math.PI) / 180
+      ctx.save()
+      ctx.shadowColor = `rgba(15, 23, 42, ${(0.5 * shadowIntensity).toFixed(3)})`
+      ctx.shadowOffsetX = Math.sin(rad0) * shadowDistance * 4
+      ctx.shadowOffsetY = -Math.cos(rad0) * shadowDistance * 4
+      ctx.shadowBlur = shadowSoftness * 4
+      roundRectPath(ctx, x, y, w, h, r)
+      ctx.fillStyle = 'rgba(255,255,255,0.01)'
+      ctx.fill()
+      ctx.restore()
+    }
+
     // clipped backdrop sample with blur + saturation
     ctx.save()
     roundRectPath(ctx, x, y, w, h, r)
@@ -180,8 +198,14 @@ export async function generateGlassSnapshot(
       ctx.fillRect(x - 16, y - 16, w + 32, h + 32)
     }
 
-    // Phase 9 M2: brushed streaks / bubbles approximations
-    drawTextureApproximations(ctx, { x, y, w, h }, config)
+    // Phase 9 M2: brushed streaks / bubbles approximations (Phase 11 M2:
+    // brushedFollow bakes the light-perpendicular angle into the canvas)
+    drawTextureApproximations(ctx, { x, y, w, h }, {
+      ...config,
+      brushedAngle: config.brushedFollow
+        ? (((Math.round(config.lightAngle) + 90) % 360) + 360) % 360
+        : config.brushedAngle,
+    })
 
     // vignette approximation (radial corner darkening)
     const vg = Math.max(0, Math.min(1, config.vignette ?? 0))

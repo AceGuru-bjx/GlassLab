@@ -21,6 +21,7 @@ import {
   GripHorizontal,
   GripVertical,
   Import,
+  LayoutGrid,
   Loader2,
   Lock,
   LockOpen,
@@ -28,6 +29,7 @@ import {
   LogOut,
   MousePointer2,
   Palette,
+  Rows3,
   Save,
   Search,
   Settings2,
@@ -76,11 +78,14 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { GlassDemoCard, GlassPill } from '@/components/glass/glass-demo-card'
+import { MotionBadge, PresetGallery } from '@/components/glass/preset-gallery'
 import { isDarkColor, toHexColor, withAlpha } from '@/lib/glass/color'
 import {
   CATEGORIES,
   DEFAULT_CONFIG,
   PRESETS,
+  isMotionConfig,
+  type CategoryFilter,
   type GlassCategory,
   type GlassConfig,
   type GlassPreset,
@@ -189,6 +194,9 @@ type NumericKey = keyof Pick<
   | 'bubbleSize'
   | 'bubbleDensity'
   | 'bubbleRise'
+  | 'shadowIntensity'
+  | 'shadowDistance'
+  | 'shadowSoftness'
   | 'edgeBlur'
   | 'vignette'
   | 'glowOpacity'
@@ -227,6 +235,11 @@ const PARAM_ROWS: {
   { key: 'bubbleSize', label: '气泡大小', min: 0.4, max: 2.2, step: 0.05, fmt: v => `${v.toFixed(2)}×` },
   { key: 'bubbleDensity', label: '气泡密度', min: 0.3, max: 2.5, step: 0.05, fmt: v => `${Math.max(1, Math.round(8 * v))} 球` },
   { key: 'bubbleRise', label: '气泡上升', min: 0, max: 1, step: 0.01, fmt: v => (v <= 0.01 ? '关' : `${(8 - 6.5 * v).toFixed(1)}s`) },
+  // ---- Phase 11 M1: directional cast shadow (direction derives from
+  //      lightAngle — rotate the light to swing the shadow around) ----
+  { key: 'shadowIntensity', label: '投影强度', min: 0, max: 1, step: 0.05, fmt: v => (v <= 0.01 ? '关' : `${Math.round(v * 100)}%`) },
+  { key: 'shadowDistance', label: '投影距离', min: 0, max: 40, step: 1, fmt: v => `${v}px` },
+  { key: 'shadowSoftness', label: '投影羽化', min: 0, max: 60, step: 1, fmt: v => `${v}px` },
   // ---- Phase 9 M1: glow system ----
   { key: 'glowOpacity', label: '辉光强度', min: 0, max: 1, step: 0.01, fmt: v => `${Math.round(v * 100)}%` },
   { key: 'glowSpread', label: '辉光范围', min: 0, max: 60, step: 1, fmt: v => `${v}px` },
@@ -277,6 +290,11 @@ const RANDOM_RANGES: Record<NumericKey, [number, number]> = {
   bubbles: [0, 0.5],
   bubbleSize: [0.6, 1.6],
   bubbleDensity: [0.5, 1.8],
+  // Phase 11: cast shadow randomizes tastefully — distance/softness keep
+  // the card grounded rather than flinging it off the stage.
+  shadowIntensity: [0, 0.5],
+  shadowDistance: [8, 26],
+  shadowSoftness: [18, 42],
   edgeBlur: [0, 0.5],
   vignette: [0, 0.35],
   glowOpacity: [0.5, 1],
@@ -425,6 +443,39 @@ function ConfigPanel({
           checked={darkContent}
           aria-label="暗色内容"
           onCheckedChange={onDarkContentChange}
+        />
+      </div>
+
+      <div className="flex items-center justify-between">
+        <div>
+          <Label className="text-xs">光源跟随光标</Label>
+          <p className="text-[11px] text-muted-foreground">
+            光标即光源，rim 与投影同步旋转
+          </p>
+        </div>
+        <Switch
+          checked={config.lightFollow}
+          aria-label="光源跟随光标"
+          onCheckedChange={v => {
+            onHistoryCheckpoint?.()
+            onChange({ lightFollow: v })
+          }}
+        />
+      </div>
+      <div className="flex items-center justify-between">
+        <div>
+          <Label className="text-xs">拉丝垂直光源</Label>
+          <p className="text-[11px] text-muted-foreground">
+            拉丝方向 = 光源角度 + 90°，金属高光物理一致
+          </p>
+        </div>
+        <Switch
+          checked={config.brushedFollow}
+          aria-label="拉丝垂直光源"
+          onCheckedChange={v => {
+            onHistoryCheckpoint?.()
+            onChange({ brushedFollow: v })
+          }}
         />
       </div>
 
@@ -813,7 +864,17 @@ function ExportPanel({
 export function GlassLab() {
   const [config, setConfig] = useState<GlassConfig>(DEFAULT_CONFIG)
   const [activePreset, setActivePreset] = useState<string>('ios-clear')
-  const [category, setCategory] = useState<'全部' | GlassCategory>('全部')
+  const [category, setCategory] = useState<CategoryFilter>('全部')
+  // Phase 11 M3: library view mode (list ↔ gallery), persisted locally.
+  // Starts as 'list' on BOTH server and client (a lazy localStorage read
+  // here would hydrate-mismatch when the stored value is 'gallery'); the
+  // stored preference is applied right after mount instead.
+  const [presetView, setPresetView] = useState<'list' | 'gallery'>('list')
+  useEffect(() => {
+    if (window.localStorage.getItem('glasslab:preset-view') === 'gallery') {
+      setPresetView('gallery')
+    }
+  }, [])
   const [bg, setBg] = useState<BackgroundOption>(BACKGROUNDS[0])
   const [darkContent, setDarkContent] = useState(false)
   const [presetName, setPresetName] = useState('')
@@ -940,6 +1001,50 @@ export function GlassLab() {
 
   // ---- Phase 4 M3: inspiration generator ----
   const [lockedParams, setLockedParams] = useState<Set<NumericKey>>(() => new Set())
+  // Phase 11 M2: light-follow — the draggable card element whose centre is
+  // the pivot for the pointer→light angle.
+  const dragCardRef = useRef<HTMLDivElement>(null)
+  const lightFollowRaf = useRef(0)
+
+  // Pointer-as-light: on every stage pointer move (lightFollow on, compare
+  // off), the light angle becomes the bearing from the card centre to the
+  // pointer (0° = above the card, clockwise). rAF-throttled and rounded to
+  // whole degrees — lightAngle is style-only (never rebakes the displacement
+  // map), so this stays cheap while rotating rim + cast shadow in real time.
+  // Continuous follow updates deliberately never push onto the undo stack;
+  // the enabling toggle itself is the single checkpoint per gesture.
+  const onStagePointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!configRef.current.lightFollow || compareOn) return
+      const px = e.clientX
+      const py = e.clientY
+      if (lightFollowRaf.current) return
+      lightFollowRaf.current = requestAnimationFrame(() => {
+        lightFollowRaf.current = 0
+        const card = dragCardRef.current
+        if (!card) return
+        const rect = card.getBoundingClientRect()
+        const cx = rect.left + rect.width / 2
+        const cy = rect.top + rect.height / 2
+        const dx = px - cx
+        const dy = cy - py
+        if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return
+        let deg = Math.round((Math.atan2(dx, dy) * 180) / Math.PI) % 360
+        if (deg < 0) deg += 360
+        if (Math.round(configRef.current.lightAngle) === deg) return
+        setConfig(c => ({ ...c, lightAngle: deg }))
+        setActivePreset('')
+      })
+    },
+    [compareOn]
+  )
+  // Release any in-flight follow frame on unmount.
+  useEffect(
+    () => () => {
+      if (lightFollowRaf.current) cancelAnimationFrame(lightFollowRaf.current)
+    },
+    []
+  )
   const toggleLock = useCallback((key: NumericKey) => {
     setLockedParams(prev => {
       const next = new Set(prev)
@@ -1034,6 +1139,15 @@ export function GlassLab() {
     const t = setTimeout(() => setDebouncedQuery(presetQuery.trim()), 300)
     return () => clearTimeout(t)
   }, [presetQuery])
+
+  // Phase 11 M3: persist the library view mode.
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('glasslab:preset-view', presetView)
+    } catch {
+      /* private mode etc. — persistence is best-effort */
+    }
+  }, [presetView])
 
   useEffect(() => {
     // Re-fetch on session transitions (login/logout change the visible set:
@@ -1376,7 +1490,7 @@ export function GlassLab() {
           </div>
           <div className="flex items-center gap-2">
             <span className="hidden rounded-full border border-teal-500/30 bg-teal-500/10 px-2.5 py-1 text-[10px] font-medium text-teal-600 sm:inline-block">
-              Phase 9 · 辉光系统与微动效
+              Phase 11 · 光影物理与灵感画廊
             </span>
             {sessionStatus === 'loading' ? (
               <div className="h-8 w-20 animate-pulse rounded-lg bg-muted" aria-hidden />
@@ -1431,61 +1545,122 @@ export function GlassLab() {
               title="玻璃样式库"
               hint={`${PRESETS.length} 款`}
             >
-              {/* category filter chips */}
-              <div
-                className="mb-3 flex gap-1.5 overflow-x-auto pb-1"
-                role="tablist"
-                aria-label="样式分类筛选"
-              >
-                {(['全部', ...CATEGORIES] as const).map(c => (
+              {/* category filter chips + view toggle (Phase 11 M3: 「动效」
+                  cross-cutting filter + list ↔ gallery switch) */}
+              <div className="mb-3 flex items-start gap-2">
+                <div
+                  className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto pb-1"
+                  role="tablist"
+                  aria-label="样式分类筛选"
+                >
+                  {(['全部', ...CATEGORIES, '动效'] as const).map(c => (
+                    <button
+                      key={c}
+                      role="tab"
+                      id={`category-tab-${c}`}
+                      aria-selected={category === c}
+                      aria-controls="preset-grid"
+                      onClick={() => setCategory(c)}
+                      data-testid={`category-${c}`}
+                      className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all ${
+                        category === c
+                          ? 'border-teal-500 bg-teal-500/10 text-teal-600'
+                          : 'text-muted-foreground hover:border-teal-500/40 hover:text-foreground'
+                      } ${c === '动效' ? 'border-dashed' : ''}`}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
+                <div
+                  className="flex shrink-0 gap-0.5 rounded-lg border bg-muted/40 p-0.5"
+                  role="group"
+                  aria-label="样式库视图切换"
+                >
                   <button
-                    key={c}
-                    role="tab"
-                    id={`category-tab-${c}`}
-                    aria-selected={category === c}
-                    aria-controls="preset-grid"
-                    onClick={() => setCategory(c)}
-                    data-testid={`category-${c}`}
-                    className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all ${
-                      category === c
-                        ? 'border-teal-500 bg-teal-500/10 text-teal-600'
-                        : 'text-muted-foreground hover:border-teal-500/40 hover:text-foreground'
+                    onClick={() => setPresetView('list')}
+                    aria-label="列表视图"
+                    aria-pressed={presetView === 'list'}
+                    data-testid="view-list"
+                    title="列表视图"
+                    className={`flex h-6 w-6 items-center justify-center rounded-md transition-colors ${
+                      presetView === 'list'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
-                    {c}
+                    <Rows3 className="h-3.5 w-3.5" aria-hidden />
                   </button>
-                ))}
+                  <button
+                    onClick={() => setPresetView('gallery')}
+                    aria-label="画廊视图"
+                    aria-pressed={presetView === 'gallery'}
+                    data-testid="view-gallery"
+                    title="画廊视图（实时渲染封面）"
+                    className={`flex h-6 w-6 items-center justify-center rounded-md transition-colors ${
+                      presetView === 'gallery'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <LayoutGrid className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                </div>
               </div>
               <div
                 id="preset-grid"
                 role="tabpanel"
                 aria-label="玻璃预设列表"
-                className="grid max-h-[520px] grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3 lg:grid-cols-2 glass-scroll"
+                className="max-h-[520px] overflow-y-auto pr-1 glass-scroll"
               >
-                {(category === '全部'
-                  ? PRESETS
-                  : PRESETS.filter(p => p.category === category)
-                ).map(p => (
-                  <button
-                    key={p.id}
-                    onClick={() => applyPreset(p)}
-                    data-active={activePreset === p.id}
-                    data-testid={`preset-${p.id}`}
-                    className="group flex flex-col items-start gap-2 rounded-xl border p-2 text-left transition-all hover:border-teal-500/50 hover:shadow-md data-[active=true]:border-teal-500 data-[active=true]:ring-2 data-[active=true]:ring-teal-500/30"
-                  >
-                    <span
-                      className="h-10 w-full rounded-lg shadow-inner"
-                      style={{ background: p.swatch }}
-                      aria-hidden
-                    />
-                    <span className="w-full">
-                      <span className="block text-xs font-medium">{p.name}</span>
-                      <span className="block truncate text-[10px] text-muted-foreground">
-                        {p.desc}
-                      </span>
-                    </span>
-                  </button>
-                ))}
+                {presetView === 'gallery' ? (
+                  <PresetGallery
+                    presets={
+                      category === '全部'
+                        ? PRESETS
+                        : category === '动效'
+                          ? PRESETS.filter(p => isMotionConfig(p.config))
+                          : PRESETS.filter(p => p.category === category)
+                    }
+                    activePreset={activePreset}
+                    onApply={applyPreset}
+                    coverSpec={coverSpec(bg)}
+                    bgKey={bg.id}
+                  />
+                ) : (
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2">
+                    {(category === '全部'
+                      ? PRESETS
+                      : category === '动效'
+                        ? PRESETS.filter(p => isMotionConfig(p.config))
+                        : PRESETS.filter(p => p.category === category)
+                    ).map(p => (
+                      <button
+                        key={p.id}
+                        onClick={() => applyPreset(p)}
+                        data-active={activePreset === p.id}
+                        data-testid={`preset-${p.id}`}
+                        className="group flex flex-col items-start gap-2 rounded-xl border p-2 text-left transition-all hover:border-teal-500/50 hover:shadow-md data-[active=true]:border-teal-500 data-[active=true]:ring-2 data-[active=true]:ring-teal-500/30"
+                      >
+                        <span
+                          className="relative block h-10 w-full overflow-hidden rounded-lg shadow-inner"
+                          style={{ background: p.swatch }}
+                          aria-hidden
+                        >
+                          {isMotionConfig(p.config) && (
+                            <MotionBadge className="absolute right-1 top-1" />
+                          )}
+                        </span>
+                        <span className="w-full">
+                          <span className="block text-xs font-medium">{p.name}</span>
+                          <span className="block truncate text-[10px] text-muted-foreground">
+                            {p.desc}
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </CardShell>
           </aside>
@@ -1660,6 +1835,7 @@ export function GlassLab() {
                 data-testid="glass-stage"
                 className="relative min-h-[560px] flex-1 overflow-hidden rounded-2xl border shadow-inner"
                 style={bgStyle}
+                onPointerMove={onStagePointerMove}
               >
                 {compareOn ? (
                   <>
@@ -1756,6 +1932,7 @@ export function GlassLab() {
                     {/* draggable demo card — flex 居中，不依赖卡高硬编码 */}
                     <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
                       <motion.div
+                        ref={dragCardRef}
                         drag
                         dragConstraints={stageRef}
                         dragElastic={config.elasticity}
@@ -2149,7 +2326,7 @@ export function GlassLab() {
             </a>{' '}
             (Apache-2.0)
           </span>
-          <span>第十阶段 · 动态玻璃生态 / 拉丝方向 · 气泡动力学 / 样式库 50 款</span>
+          <span>第十一阶段 · 光影物理与灵感画廊 / 方向性投影 · 光源跟随 · 样式库 {PRESETS.length} 款</span>
         </div>
       </footer>
     </div>

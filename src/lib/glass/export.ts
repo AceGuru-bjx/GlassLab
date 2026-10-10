@@ -52,6 +52,24 @@ function cssBody(config: GlassConfig): string {
   const bubbles = Math.max(0, Math.min(1, config.bubbles ?? 0))
   // Phase 10 M1/M2: parametric textures (direction / scale / count / rise).
   const brushedAngle = Math.max(0, Math.min(360, config.brushedAngle ?? 0))
+  // Light angle, normalized (0 = to top, clockwise).
+  const rimAngleDeg = ((Math.round(Number.isFinite(config.lightAngle) ? config.lightAngle : 45) % 360) + 360) % 360
+  // ---- Phase 11 M1: directional cast shadow (exported as a static bake of
+  // the current lightAngle; the live light-follow rotation is interactive
+  // and cannot be expressed in pure CSS). Shadow falls along the light
+  // direction: dx = sin(θ)·d, dy = -cos(θ)·d (CSS y grows downward). ----
+  const shadowIntensity = Math.max(0, Math.min(1, config.shadowIntensity ?? 0))
+  const shadowDistance = Math.max(0, Math.min(40, config.shadowDistance ?? 14))
+  const shadowSoftness = Math.max(0, Math.min(60, config.shadowSoftness ?? 28))
+  const castShadow =
+    shadowIntensity > 0.01
+      ? `,\n  /* 方向性投影（光源 ${rimAngleDeg}°对侧） */\n  ${(Math.sin((rimAngleDeg * Math.PI) / 180) * shadowDistance).toFixed(1)}px ${(-Math.cos((rimAngleDeg * Math.PI) / 180) * shadowDistance).toFixed(1)}px ${shadowSoftness.toFixed(1)}px rgba(15, 23, 42, ${(0.5 * shadowIntensity).toFixed(3)})`
+      : ''
+  // Phase 11 M2: brushedFollow bakes the effective angle (light + 90°) —
+  // CSS exports are static, the live link is a lab-only interactive state.
+  const effectiveBrushedAngle = config.brushedFollow
+    ? (((rimAngleDeg + 90) % 360) + 360) % 360
+    : brushedAngle
   const bubbleSize = Math.max(0.4, Math.min(2.2, config.bubbleSize ?? 1))
   const bubbleDensity = Math.max(0.3, Math.min(2.5, config.bubbleDensity ?? 1))
   const bubbleRise = Math.max(0, Math.min(1, config.bubbleRise ?? 0))
@@ -62,7 +80,7 @@ function cssBody(config: GlassConfig): string {
     bgSizes.push('180px 180px')
   }
   if (brushed > 0.01) {
-    bgImages.push(`url("${brushedDataUri(brushed * 0.4, brushedAngle)}")`)
+    bgImages.push(`url("${brushedDataUri(brushed * 0.4, effectiveBrushedAngle)}")`)
     bgSizes.push('240px 240px')
   }
   if (bubbles > 0.01) {
@@ -109,11 +127,8 @@ function cssBody(config: GlassConfig): string {
     rootAnimations.length > 0 ? `\n  animation: ${rootAnimations.join(', ')};` : ''
   const glowPulseKeyframes =
     glowPulse > 0.01 && hasGlow
-      ? `\n\n/* 辉光呼吸（周期 ${glowPulsePeriod}s） */\n@keyframes glass-glow-pulse {\n  from { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28),\n    inset 0 -1px 0 rgba(0, 0, 0, 0.12), 0 8px 32px rgba(0, 0, 0, 0.12)${vignetteShadow},\n  0 0 ${glowSpread}px ${(glowSpread / 12).toFixed(1)}px ${scaleColorAlpha(config.glow, glowOpacity)}; }\n  to { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28),\n    inset 0 -1px 0 rgba(0, 0, 0, 0.12), 0 8px 32px rgba(0, 0, 0, 0.12)${vignetteShadow},\n  0 0 ${glowSpread}px ${(glowSpread / 12).toFixed(1)}px ${scaleColorAlpha(config.glow, glowOpacity * 0.45)}; }\n}`
+      ? `\n\n/* 辉光呼吸（周期 ${glowPulsePeriod}s）— 两态均携带完整投影栈（含方向性投影） */\n@keyframes glass-glow-pulse {\n  from { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28),\n    inset 0 -1px 0 rgba(0, 0, 0, 0.12), 0 8px 32px rgba(0, 0, 0, 0.12)${vignetteShadow}${castShadow},\n  0 0 ${glowSpread}px ${(glowSpread / 12).toFixed(1)}px ${scaleColorAlpha(config.glow, glowOpacity)}; }\n  to { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28),\n    inset 0 -1px 0 rgba(0, 0, 0, 0.12), 0 8px 32px rgba(0, 0, 0, 0.12)${vignetteShadow}${castShadow},\n  0 0 ${glowSpread}px ${(glowSpread / 12).toFixed(1)}px ${scaleColorAlpha(config.glow, glowOpacity * 0.45)}; }\n}`
       : ''
-  // Rim flow swaps the ::before gradient to the animated angle variable and
-  // registers it via @property for smooth <angle> interpolation.
-  const rimAngleDeg = ((Math.round(Number.isFinite(config.lightAngle) ? config.lightAngle : 45) % 360) + 360) % 360
   const rimFlowRule =
     rimFlow > 0.01
       ? `\n  --glass-rim-start: ${rimAngleDeg}deg;\n  --glass-rim-angle: ${rimAngleDeg}deg;\n  animation: glass-rim-flow ${rimFlowPeriod}s linear infinite;`
@@ -147,7 +162,7 @@ function cssBody(config: GlassConfig): string {
   -webkit-backdrop-filter: blur(${config.blur}px) saturate(${config.saturation}%);
   backdrop-filter: blur(${config.blur}px) saturate(${config.saturation}%);${tintBg}${frostBg}
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.12), 0 8px 32px rgba(0, 0, 0, 0.12)${vignetteShadow}${glow};${glowAnimationRule}
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12), 0 8px 32px rgba(0, 0, 0, 0.12)${vignetteShadow}${castShadow}${glow};${glowAnimationRule}
 }
 
 /* 菲涅尔边缘高光 ${Math.round(hl * 100)}% @ ${config.lightAngle}° */
@@ -270,6 +285,9 @@ export function validateConfigObject(raw: unknown): GlassConfig | null {
     'bubbleSize',
     'bubbleDensity',
     'bubbleRise',
+    'shadowIntensity',
+    'shadowDistance',
+    'shadowSoftness',
     'edgeBlur',
     'vignette',
     'glowOpacity',
@@ -282,7 +300,7 @@ export function validateConfigObject(raw: unknown): GlassConfig | null {
     if (!Number.isFinite(v)) return null
     merged[k] = v
   }
-  const boolKeys = ['depthEffect', 'overLight'] as const
+  const boolKeys = ['depthEffect', 'overLight', 'lightFollow', 'brushedFollow'] as const
   for (const k of boolKeys) {
     if (typeof merged[k] !== 'boolean') return null
   }
