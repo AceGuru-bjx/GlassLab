@@ -15,6 +15,7 @@ import {
   Check,
   Copy,
   GitCompare,
+  ImageDown,
   GripHorizontal,
   GripVertical,
   Import,
@@ -44,6 +45,7 @@ import { cn } from '@/lib/utils'
 
 import { AuthDialog } from '@/components/glass/auth-dialog'
 import { generateGlassCover, type CoverBackgroundSpec } from '@/lib/glass/cover'
+import { generateGlassSnapshot, type SnapshotBackgroundSpec } from '@/lib/glass/snapshot'
 
 import {
   configToCss,
@@ -201,6 +203,15 @@ const PARAM_ROWS: {
 
 /** Map a stage background option to the canvas cover generator spec. */
 function coverSpec(b: BackgroundOption): CoverBackgroundSpec {
+  return {
+    imageUrl: b.url,
+    gradientColors: b.coverGradient?.colors,
+    gradientAngle: b.coverGradient?.angle,
+  }
+}
+
+/** Map a stage background option to the full-size PNG snapshot spec. */
+function snapshotSpec(b: BackgroundOption): SnapshotBackgroundSpec {
   return {
     imageUrl: b.url,
     gradientColors: b.coverGradient?.colors,
@@ -408,14 +419,37 @@ const EXPORT_FORMATS = [
 
 type ExportFormatId = (typeof EXPORT_FORMATS)[number]['id']
 
-/** Phase 2 M2: code export + share-link panel. */
-function ExportPanel({ config }: { config: GlassConfig }) {
+/** Phase 2 M2: code export + share-link panel; Phase 6 M1 adds PNG snapshot. */
+function ExportPanel({ config, bg }: { config: GlassConfig; bg: BackgroundOption }) {
   const [format, setFormat] = useState<ExportFormatId>('css')
   const [copied, setCopied] = useState<string | null>(null)
+  const [snapBusy, setSnapBusy] = useState(false)
 
   const current = EXPORT_FORMATS.find(f => f.id === format) ?? EXPORT_FORMATS[0]
   const code = useMemo(() => current.gen(config), [current, config])
   const link = useMemo(() => shareUrl(config), [config])
+
+  const handleSnapshot = useCallback(async () => {
+    setSnapBusy(true)
+    try {
+      const blob = await generateGlassSnapshot(snapshotSpec(bg), config)
+      if (!blob) throw new Error()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `glasslab-snapshot-${Date.now()}.png`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      // Give the browser a moment to start the download before revoking.
+      setTimeout(() => URL.revokeObjectURL(url), 4000)
+      toast({ title: 'PNG 快照已下载', description: '1600×1000 · 含背景与玻璃卡片' })
+    } catch {
+      toast({ title: '快照生成失败', description: '请稍后重试', variant: 'destructive' })
+    } finally {
+      setSnapBusy(false)
+    }
+  }, [config, bg])
 
   const copyText = useCallback(
     async (text: string, tag: string, label: string) => {
@@ -524,6 +558,31 @@ function ExportPanel({ config }: { config: GlassConfig }) {
             复制
           </Button>
         </div>
+      </div>
+
+      <Separator />
+
+      {/* Phase 6 M1: full-size PNG snapshot of the stage */}
+      <div>
+        <Label className="text-xs">PNG 快照</Label>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">
+          当前背景与玻璃卡片合成为 1600×1000 图片并下载
+        </p>
+        <Button
+          size="sm"
+          variant="outline"
+          className="mt-2 w-full gap-1.5"
+          onClick={handleSnapshot}
+          disabled={snapBusy}
+          data-testid="download-png"
+        >
+          {snapBusy ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <ImageDown className="h-3.5 w-3.5" />
+          )}
+          下载 PNG 快照
+        </Button>
       </div>
     </div>
   )
@@ -1081,7 +1140,7 @@ export function GlassLab() {
           </div>
           <div className="flex items-center gap-2">
             <span className="hidden rounded-full border border-teal-500/30 bg-teal-500/10 px-2.5 py-1 text-[10px] font-medium text-teal-600 sm:inline-block">
-              Phase 5 · 效果扩展与五批深度检查进行中
+              Phase 6 · 快照导出与预设互通进行中
             </span>
             {sessionStatus === 'loading' ? (
               <div className="h-8 w-20 animate-pulse rounded-lg bg-muted" aria-hidden />
@@ -1619,7 +1678,7 @@ export function GlassLab() {
                   </div>
                 </TabsContent>
                 <TabsContent value="export">
-                  <ExportPanel config={config} />
+                  <ExportPanel config={config} bg={bg} />
                 </TabsContent>
                 <TabsContent value="saved">
                   {/* Phase 4 M1: search + sort header */}
@@ -1809,7 +1868,7 @@ export function GlassLab() {
             </a>{' '}
             (Apache-2.0)
           </span>
-          <span>第五阶段 · 玻璃效果扩展（边缘高斯弥散 / 磨砂噪点 / 暗角）+ 五批全面深度检查</span>
+          <span>第六阶段 · PNG 快照导出 / 预设视图筛选 / 配置文件导入导出</span>
         </div>
       </footer>
     </div>
