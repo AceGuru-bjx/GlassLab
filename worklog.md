@@ -532,3 +532,26 @@ Stage Summary (深度检查):
 - 第十轮深度检查闭环：4 缺陷（1 引擎视觉 + 1 a11y + 2 导出）全修复，issue 全闭环，repo 推进至 daa799b
 - 沉淀陷阱：①对象字面量后键覆盖前键——radiusStyle 注入 animation 后同层自带动效必须用 combo 合并；②agent-browser 的 media 模拟跨 reload 持久、set off 无效——需 close+open 全新会话（且 close 后 open 偶发 about:blank 要强制 navigate，老陷阱重演）；③hash 深链只在硬载入时生效（同页 hash 变更不重挂载不触发 effect）
 - Phase 15 规划（Task 20 候选落地）：M1 虹彩动态流动（iriFlow conic 角度扫动）/ M2 星芒颜色参数化 / M3 果冻拖拽联动（释放触发 wobble 脉冲）
+
+Work Log (Phase 15 部分，已完成):
+- 规划 Phase 15「流光溢彩」三里程碑：建 #109/#110/#111 入 Project Todo（GraphQL addProjectV2ItemById）
+- M1（#109）虹彩流动：iriFlow 0..1 默认 0；@property --glass-iri-angle + keyframes glass-iri-flow（起角锚定 lightAngle，360° 线性扫动，周期 (7-5·iriFlow)/motionSpeed）；引擎虹彩层 combo() 与 jelly 共存 + data-glass-animated；导出 @property/keyframes/::before 双动画合并列表（rimFlow+iriFlow 独立通道）/conic var 角度/motionGuard；isMotionConfig 联锁 iridescence；新预设油膜流转 → 64→65 款
+- M2（#110）星芒颜色：sparkleColor 闭枚举 white/gold/rainbow（默认 white 字节一致存量）；starFill() 烘焙期着色（金 rgba(255,208,90)、彩虹逐星黄金角 137.5° 色相）；sparkleDataUri + drawTextureApproximations（cover/snapshot）双管线；色彩面板三 chip radiogroup；zod 枚举 + validate 回落 white；新预设鎏金星尘/星虹万花 → 65→67 款
+- M3（#111）拖拽回弹：dragBounce 0..1 默认 0（framer 默认临界阻尼不变）；开启后 whileDrag scale 经欠阻尼弹簧 damping 22-18·dragBounce 回稳（1.03→0.97→1.01→1 果冻落桌）；三个可拖元素统一接入 + useReducedMotion 瞬时归位；交互态参数不导出（lightFollow 同裁决）；新预设软糖弹跳 → 67→68 款
+- 实施中发现并即修 3 起：①`from var(--glass-iri-angle)deg` 单位拼接 bug（var 自带 deg，45degdeg 使渐变整体失效→改 var 原值不带后缀）；②React shorthand/longhand 警告——animation 简写与独立 animationDelay 键混用触发 rerender 警告 → 延迟折入简写 `glass-sparkle 2.9s ease-in-out -1.7s infinite alternate`；③export.ts iriConic 引用后声明 TDZ（声明上移并注释）
+- E2E 验证矩阵全绿：iri 活体角度采样 176.161°→287.786°/1.3s（≈理论 83.7°/s 线性）；motionSpeed 1.1× 双周期除法（jelly 4.1→3.7/iri 4.3→3.6）；金 rgba(255,208,90,0.520/0.600) 逐星 alpha；彩虹 9 黄金角色相精确 [0,138,275,53,190,328,105,243,20]；chip 金白往返；回弹 min 0.9780/max 1.0110 振荡实证 + dragBounce=0 单调归位无下冲；导出矩阵 5/5（iri 结构/双动画列表/金彩虹 URI/iri+wobble root 分治/legacy 字节兼容 0 keyframes）；API（legacy 201 补默认/新字段 201/pink 枚举 400/iriFlow 1.5 越界 400）；深链还原 3 新参数（iri 层 'glass-jelly, glass-iri-flow'）；保存预设封面 VLM 实证（「星芒多彩粉蓝绿」+「边缘彩虹光谱带」）；4 新预设动效徽章；68 预设/37 滑杆；390px 零溢出；console 清洁（预设切换复测）
+- 提交 ed2e103 推送 → CI 四门禁全绿 → #109/#110/#111 自动关闭 + 验证报告回帖 + Project 全 Done；测试数据清理归零
+
+Stage Summary:
+- 本轮双产出：第十轮深度检查（4 缺陷 #106/#107/#108 全闭环）+ Phase 15 三里程碑（#109/#110/#111 全闭环）
+- GlassConfig 参数 46→49（+iriFlow/sparkleColor/dragBounce），全部默认值后向兼容（iriFlow 0=静态、white=字节一致、dragBounce 0=默认弹簧）
+- 样式库 64→68 款（创意 27/17 项分类…油膜流转/鎏金星尘/星虹万花/软糖弹跳）；动效徽章 13→17（4 新预设全带）
+- 关键决策：①虹彩扫动走 rim-flow 同款注册 <angle> 通道（::before 双动画逗号列表各自独立通道复合）；②星芒颜色烘焙期着色（SVG fill / canvas fillStyle 同源确定性）；③拖拽回弹用 framer 欠阻尼弹簧而非 WAAPI keyframes（声明式、与 drag 系统同框架）；④交互态参数（dragBounce/lightSmoothing/lightFollow）一律不导出
+- 沉淀陷阱：①**var() 单位拼接**——`from var(--x)deg` 读作 45degdeg 使整条渐变失效（var 自带单位，勿后缀）；②React style 混用 animation 简写与 animationDelay 长键触发 rerender 警告（延迟折入简写）；③**globals.css 改动在 Turbopack dev 下可能不触发 CSS chunk 重建**——touch globals.css 无效，需 touch 导入它的 layout.tsx 强制重建链条（本轮 CSS 「消失」误诊 30 分钟的根源）；④agent-browser media 模拟跨 reload 持久且 set off 不清除——唯一解法 close+open 全新会话；⑤hash 深链只在硬载入生效（同页 hash 变更不重挂载）
+- GitHub 产物：repo 推进至 ed2e103（CI 四门禁全绿，2 commits：daa799b 检查修复 + ed2e103 Phase 15）、issues #106-#111 六个全闭环（报告回帖）、Project 六条目 Done、PR #364 待审（正常等待）
+
+未解决/风险与下一步建议:
+- PR #364 仍待 Ultra-Guru 维护者评审（正常等待，无新评论）
+- iriFlow 的 lightFollow 联动：起角锚定 lightAngle 且 lightFollow 实时旋转——两系统同时驱动 conic 角度时扫动基座跟随指针（已验证数学正确，但观感待用户反馈）
+- 软糖弹跳的拖拽方向感知形变（拉伸方向跟随拖拽矢量——squash & stretch 各向异性）为候选增强
+- 下轮候选：①第十一轮深度检查（覆盖 Phase 15 新增 ~390 行——按节奏应优先）；②星芒拖尾/流星模式（twinkle 之外的长周期划过）；③虹彩与 tint 联动（光谱带从 tint 色相展开而非固定 8 档）；④快捷键自定义面板（Phase 13 遗留候选）；⑤导出 React 组件动效 demo 页（Phase 9 遗留候选）
