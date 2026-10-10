@@ -16,6 +16,7 @@ import {
   bubbleDriftPeriodSec,
   bubbleRisePeriodSec,
   bubblesDataUri,
+  dropletsDataUri,
   sparkleDataUri,
   sparkleTwinklePeriodSec,
 } from './textures'
@@ -96,18 +97,20 @@ function cssBody(config: GlassConfig): string {
   // stack — sparkle seeds push after it, so "last index" is not the bubble
   // layer and every per-layer position list must key off this index.
   let bubbleLayerIndex = -1
-  // Phase 16 M3 (#117): glare sweep — the diagonal specular band rides at
-  // the TOP of the root's background stack (CSS list order: first = topmost),
-  // mirroring the engine's DOM order where the glare div paints above every
-  // texture layer (frost/brushed/bubbles/sparkle) and below only the
-  // iridescence (::before, separate stacking). Previously pushed last —
-  // i.e. painted UNDER the textures, an engine/export parity inversion
-  // (#108 class). All per-layer lists below (repeat / position-x / rise -y /
-  // drift -x) are index-derived, so the reorder re-keys them automatically.
+  // Phase 16 M3 (#117) + Phase 17 M1: the CSS background list mirrors the
+  // ENGINE's DOM paint order exactly (first list entry = topmost, matching
+  // later siblings painting higher): glare > droplets > sparkle > bubbles >
+  // brushed > frost — all under the ::before rim/iridescence. The pre-#117
+  // order inverted this stack (frost first = topmost) — every per-layer list
+  // below (repeat / position-x / rise -y / drift -x) is index-derived, so
+  // the reorder re-keys them automatically.
   const glare = Math.max(0, Math.min(1, config.glare ?? 0))
   const glareAnimated = glare > 0.01
+  const glareAngle = Math.round(
+    Math.max(0, Math.min(360, config.glareAngle ?? 115))
+  )
   let glareLayerIndex = -1
-  const glareBand = `linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, ${(
+  const glareBand = `linear-gradient(${glareAngle}deg, transparent 30%, rgba(255, 255, 255, ${(
     glare * 0.42
   ).toFixed(3)}) 48%, rgba(255, 255, 255, ${(glare * 0.55).toFixed(3)}) 50%, rgba(255, 255, 255, ${(
     glare * 0.42
@@ -117,18 +120,16 @@ function cssBody(config: GlassConfig): string {
     bgImages.push(glareBand)
     bgSizes.push('250% 100%')
   }
-  if (frost > 0.01) {
-    bgImages.push(`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 ${frostGrain} ${frostGrain} ${frostGrain} 0 0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E")`)
-    bgSizes.push('180px 180px')
-  }
-  if (brushed > 0.01) {
-    bgImages.push(`url("${brushedDataUri(brushed * 0.4, effectiveBrushedAngle)}")`)
-    bgSizes.push('240px 240px')
-  }
-  if (bubbles > 0.01) {
-    bubbleLayerIndex = bgImages.length
-    bgImages.push(`url("${bubblesDataUri(bubbles * 0.55, bubbleSize, bubbleDensity)}")`)
-    bgSizes.push('200px 200px')
+  // Phase 17 M1: condensation droplets — single stretched layer (edge-gathered
+  // beads cannot be a repeating tile), above sparkle, below glare.
+  const droplets = Math.max(0, Math.min(1, config.droplets ?? 0))
+  const dropletSize = Math.max(0.5, Math.min(2, config.dropletSize ?? 1))
+  const dropletsAnimated = droplets > 0.01
+  let dropletLayerIndex = -1
+  if (dropletsAnimated) {
+    dropletLayerIndex = bgImages.length
+    bgImages.push(`url("${dropletsDataUri(droplets * 0.85, dropletSize)}")`)
+    bgSizes.push('100% 100%')
   }
   // Phase 14 M2: sparkle glints — both seed constellations stack statically
   // (the live twinkle is engine-only: per-layer opacity cannot animate on a
@@ -148,8 +149,19 @@ function cssBody(config: GlassConfig): string {
       bgSizes.push('220px 220px')
     }
   }
-  // Phase 16 M3: the glare band is declared ABOVE (before frost) so it
-  // paints on top — engine parity, see the #117 note at the declaration.
+  if (bubbles > 0.01) {
+    bubbleLayerIndex = bgImages.length
+    bgImages.push(`url("${bubblesDataUri(bubbles * 0.55, bubbleSize, bubbleDensity)}")`)
+    bgSizes.push('200px 200px')
+  }
+  if (brushed > 0.01) {
+    bgImages.push(`url("${brushedDataUri(brushed * 0.4, effectiveBrushedAngle)}")`)
+    bgSizes.push('240px 240px')
+  }
+  if (frost > 0.01) {
+    bgImages.push(`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 ${frostGrain} ${frostGrain} ${frostGrain} 0 0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E")`)
+    bgSizes.push('180px 180px')
+  }
   // The sweep animates a registered <percentage> var consumed by the glare
   // layer's entry in the static background-position-x list — a channel
   // disjoint from the rise's -y longhand and the drift's per-layer -x lists
@@ -157,15 +169,24 @@ function cssBody(config: GlassConfig): string {
   // three compose on the same root without clobbering (#108 pattern).
   const frostBg =
     bgImages.length > 0
-      ? `\n  /* 叠层纹理（SVG data-URI，零 JS） */\n  background-image: ${bgImages.join(', ')};\n  background-size: ${bgSizes.join(', ')};${
-            glareAnimated
+      ? `\n  /* 叠层纹理（SVG data-URI，零 JS；列表自顶向下 = 引擎绘制序） */\n  background-image: ${bgImages.join(', ')};\n  background-size: ${bgSizes.join(', ')};${
+            glareAnimated || dropletsAnimated
               ? `\n  background-repeat: ${bgImages
-                  .map((_, i) => (i === glareLayerIndex ? 'no-repeat' : 'repeat'))
-                  .join(', ')};\n  background-position-x: ${bgImages
-                  .map((_, i) =>
-                    i === glareLayerIndex ? 'var(--glass-glare-x)' : '0px'
+                  .map(
+                    (_, i) =>
+                      (i === glareLayerIndex || i === dropletLayerIndex
+                        ? 'no-repeat'
+                        : 'repeat')
                   )
-                  .join(', ')};`
+                  .join(', ')};${
+                    glareAnimated
+                      ? `\n  background-position-x: ${bgImages
+                          .map((_, i) =>
+                            i === glareLayerIndex ? 'var(--glass-glare-x)' : '0px'
+                          )
+                          .join(', ')};`
+                      : ''
+                  }`
               : ''
           }`
       : ''
@@ -536,6 +557,9 @@ export function validateConfigObject(raw: unknown): GlassConfig | null {
     'wobble',
     'dragBounce',
     'dragSquash',
+    'droplets',
+    'dropletSize',
+    'glareAngle',
     'glare',
   ] as const
   for (const k of numKeys) {

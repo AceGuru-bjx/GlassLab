@@ -121,6 +121,17 @@ export interface GlassConfig {
    *  release. 0 = off (identity transform, rendering unchanged; interaction
    *  param, not exported — dragBounce ruling). */
   dragSquash: number
+  /** Phase 17 M1: condensation droplets — edge-gathered water beads with a
+   *  crisp specular core (single stretched 320×200 layer, background-size
+   *  100% 100%; 0 = off, beads absent). Density also scales opacity. */
+  droplets: number
+  /** Phase 17 M1: bead scale 0.5..2 (default 1) — coalesced border beads
+   *  stretch along the nearest edge. */
+  dropletSize: number
+  /** Phase 17 M2: glare band direction 0..360° (default 115 — the Phase 16
+   *  hardcoded diagonal, byte-identical legacy). brushedAngle convention:
+   *  static in exports (no interactive state). */
+  glareAngle: number
   /** Phase 16 M3: glare sweep — a diagonal specular band periodically
    *  crossing the surface (credit-card glint). 0 = off; intensity scales the
    *  band alpha and shortens the period (motionSpeed applies). Exported via
@@ -219,6 +230,9 @@ export const DEFAULT_CONFIG: GlassConfig = {
   wobble: 0,
   dragBounce: 0,
   dragSquash: 0,
+  droplets: 0,
+  dropletSize: 1,
+  glareAngle: 115,
   glare: 0,
 }
 
@@ -1846,6 +1860,95 @@ export const PRESETS: GlassPreset[] = [
       shadowIntensity: 0.3,
       shadowDistance: 16,
       shadowSoftness: 30,
+    },
+  },
+  {
+    id: 'morning-condensation',
+    name: '晨雾凝珠',
+    desc: '冷凝水珠缘边聚集，清晨的第一口凉气',
+    swatch: 'linear-gradient(125deg,rgba(224,242,254,0.92),rgba(191,219,254,0.55) 55%,rgba(125,211,252,0.6))',
+    category: '材质',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 22,
+      height: 30,
+      dispersion: 0.18,
+      blur: 5,
+      saturation: 118,
+      cornerRadius: 24,
+      tint: '#dbeafe',
+      tintOpacity: 0.14,
+      highlight: 0.85,
+      lightAngle: 70,
+      droplets: 0.7,
+      dropletSize: 1.15,
+      frost: 0.18,
+      glow: 'rgba(191,219,254,0.26)',
+      glowSpread: 20,
+      shadowIntensity: 0.32,
+      shadowDistance: 17,
+      shadowSoftness: 34,
+    },
+  },
+  {
+    id: 'iced-soda',
+    name: '冰镇汽水',
+    desc: '杯壁挂珠，气泡与水珠一起上浮',
+    swatch: 'linear-gradient(120deg,rgba(254,243,199,0.9),rgba(253,186,116,0.6) 50%,rgba(251,146,60,0.65))',
+    category: '创意',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 28,
+      height: 36,
+      dispersion: 0.26,
+      blur: 3,
+      saturation: 132,
+      cornerRadius: 26,
+      tint: '#fdba74',
+      tintOpacity: 0.13,
+      highlight: 0.8,
+      lightAngle: 55,
+      droplets: 0.55,
+      dropletSize: 0.9,
+      bubbles: 0.5,
+      bubbleSize: 0.7,
+      bubbleDensity: 1.4,
+      bubbleRise: 0.35,
+      glow: 'rgba(253,224,71,0.24)',
+      glowSpread: 22,
+      shadowIntensity: 0.3,
+      shadowDistance: 15,
+      shadowSoftness: 28,
+    },
+  },
+  {
+    id: 'frosted-mirror',
+    name: '寒潭镜面',
+    desc: '水珠垂落边缘，冷光斜掠镜潭',
+    swatch: 'linear-gradient(115deg,rgba(241,245,249,0.92),rgba(203,213,225,0.5) 45%,rgba(100,116,139,0.7))',
+    category: '光影',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 16,
+      height: 22,
+      dispersion: 0.1,
+      blur: 4,
+      saturation: 108,
+      cornerRadius: 20,
+      tint: '#f1f5f9',
+      tintOpacity: 0.09,
+      highlight: 0.92,
+      lightAngle: 60,
+      droplets: 0.42,
+      dropletSize: 1.3,
+      glare: 0.34,
+      glareAngle: 95,
+      vignette: 0.22,
+      glow: 'rgba(226,232,240,0.3)',
+      glowSpread: 16,
+      shadowIntensity: 0.38,
+      shadowDistance: 19,
+      shadowSoftness: 38,
     },
   },
 ]

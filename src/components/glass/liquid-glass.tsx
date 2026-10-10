@@ -37,6 +37,7 @@ import {
   bubbleDriftPeriodSec,
   bubbleRisePeriodSec,
   bubblesDataUri,
+  dropletsDataUri,
   sparkleDataUri,
   sparkleTwinklePeriodSec,
 } from '@/lib/glass/textures'
@@ -377,9 +378,19 @@ function LiquidGlassImpl({
   // gradient; background-position-x 100%→0% sweeps it left→right with both
   // endpoints off-screen, so the loop restart is invisible. The keyframes
   // dwell at the end (45% sweep / 55% rest) so the effect breathes.
+  // Phase 17 M2: the band direction is a parameter (default 115° — the
+  // Phase 16 hardcoded diagonal, legacy byte-identical).
   const glare = Math.max(0, Math.min(1, config.glare ?? 0))
   const glareAnimated = glare > 0.01
+  const glareAngle = Math.round(
+    Math.max(0, Math.min(360, config.glareAngle ?? 115))
+  )
   const glarePeriod = ((9 - 7 * glare) / motionSpeed).toFixed(1)
+  // Phase 17 M1: condensation droplets — edge-gathered water beads on a
+  // single stretched layer (see textures.ts dropletsDataUri for why the
+  // layer is not a repeating tile).
+  const droplets = Math.max(0, Math.min(1, config.droplets ?? 0))
+  const dropletSize = Math.max(0.5, Math.min(2, config.dropletSize ?? 1))
   const glowAnimated = glowPulse > 0.01 && !!glowColor
   const rimAnimated = rimFlow > 0.01
   // Frosted grain: feTurbulence -> white grain w/ noise-derived alpha.
@@ -781,6 +792,25 @@ function LiquidGlassImpl({
           />
         ))}
 
+      {/* Phase 17 M1: condensation droplets — edge-gathered water beads
+          attached to the glass surface. A SINGLE stretched layer (not a
+          tile): real condensation crowds toward the card borders, which a
+          repeating pattern could never express. Sits above the sparkle
+          constellations and below the glare band (water under light).
+          No blend mode (Phase 1 backdrop-isolation lesson). */}
+      {droplets > 0.01 && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            ...radiusStyle(),
+            backgroundImage: `url("${dropletsDataUri(droplets * 0.85, dropletSize)}")`,
+            backgroundSize: '100% 100%',
+            backgroundRepeat: 'no-repeat',
+          }}
+        />
+      )}
+
       {/* Phase 16 M3: glare sweep — a diagonal specular band crossing the
           surface on its own layer (engine parity with the export's
           --glass-glare-x channel). No blend mode: plus-lighter on a backdrop
@@ -793,7 +823,7 @@ function LiquidGlassImpl({
           className="pointer-events-none absolute inset-0"
           style={{
             ...radiusStyle(),
-            backgroundImage: `linear-gradient(115deg, transparent 30%, rgba(255,255,255,${(
+            backgroundImage: `linear-gradient(${glareAngle}deg, transparent 30%, rgba(255,255,255,${(
               glare * 0.42
             ).toFixed(3)}) 48%, rgba(255,255,255,${(glare * 0.55).toFixed(3)}) 50%, rgba(255,255,255,${(
               glare * 0.42

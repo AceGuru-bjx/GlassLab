@@ -115,6 +115,11 @@ const glassConfigSchema = z.object({
   // Phase 16 M1: direction-aware drag squash & stretch — interaction feel,
   // default 0 (off) keeps every stored row and older payload identical.
   dragSquash: z.number().min(0).max(1).default(0),
+  // Phase 17 M1: condensation droplets — texture state, default 0 (off).
+  droplets: z.number().min(0).max(1).default(0),
+  dropletSize: z.number().min(0.5).max(2).default(1),
+  // Phase 17 M2: glare band direction — default 115 (Phase 16 legacy angle).
+  glareAngle: z.number().min(0).max(360).default(115),
   // Phase 16 M3: glare sweep — surface specular band, default 0 (off).
   glare: z.number().min(0).max(1).default(0),
 })

@@ -276,6 +276,88 @@ export function sparkleTwinklePeriodSec(sparkleTwinkle: number): string {
 }
 
 // ---------------------------------------------------------------------------
+// Phase 17 M1: condensation droplets — edge-gathered water beads.
+// Unlike the seamless tiles above, this layer is a SINGLE stretched image
+// (viewBox 320×200, background-size 100% 100%): real condensation gathers
+// at the card's borders (surface tension pulls the water outward), and a
+// repeating tile could never express card-relative edge gathering. Beads
+// stretch with the element — water following the glass, thematically fine.
+// ---------------------------------------------------------------------------
+
+/** Edge-weighted deterministic droplet layout in the 320×200 viewBox.
+ *  Returns [cx, cy, rx, ry, alpha] beads — rx≠ry marks a coalesced streak
+ *  (elongated along the nearest edge). Shared by the SVG bake and the
+ *  canvas cover/snapshot approximation so both render identically. */
+function dropletLayout(
+  density: number,
+  size: number
+): Array<[number, number, number, number, number]> {
+  const d = clamp(density, 0, 1)
+  const s = clamp(size, 0.5, 2)
+  const target = Math.min(96, Math.round(14 + 62 * d))
+  const rnd = lcg(20261011)
+  const out: Array<[number, number, number, number, number]> = []
+  let attempts = 0
+  while (out.length < target && attempts < target * 45) {
+    attempts++
+    const cx = rnd() * 320
+    const cy = rnd() * 200
+    // Edge proximity: 0 exactly at a border → 1 fully interior (36px inset).
+    const edge = Math.min(cx, cy, 320 - cx, 200 - cy)
+    const t = Math.min(1, edge / 36)
+    // Acceptance bias — droplets crowd toward the borders (surface tension).
+    if (rnd() > 0.1 + 0.9 * Math.pow(1 - t, 1.6)) continue
+    // Beads near the edge run slightly larger (coalescence)…
+    const r = (1.8 + rnd() * 3.4) * s * (1 + 0.5 * (1 - t))
+    // …and ~32% of border beads stretch along the nearest edge (merged runs).
+    const streak = t < 0.25 && rnd() < 0.32
+    const rx = streak ? r * 1.55 : r
+    const ry = streak ? r * 0.7 : r
+    let ok = true
+    for (const [x, y, prx, pry] of out) {
+      if (Math.hypot(cx - x, cy - y) < (rx + prx) * 0.7 + (ry + pry) * 0.3 + 2) {
+        ok = false
+        break
+      }
+    }
+    if (ok) out.push([cx, cy, rx, ry, 0.55 + rnd() * 0.45])
+  }
+  return out
+}
+
+/**
+ * Condensation droplet layer (single stretched 320×200 SVG, no tiling).
+ * Each bead is a small lens: a crisp off-center specular core, a cool faint
+ * body and a bright rim — tighter and smaller than the gas bubbles so the
+ * two textures read differently at a glance.
+ *
+ * @param alphaK overall visibility 0..1 (engine passes droplets × 0.85)
+ * @param size bead scale 0.5..2 (default 1)
+ */
+export function dropletsDataUri(alphaK: number, size = 1): string {
+  const k = clamp(alphaK, 0, 1)
+  const a = (base: number) =>
+    Math.max(0, Math.min(1, base * k)).toFixed(3)
+  const beads = dropletLayout(k, size)
+    .map(([cx, cy, rx, ry, op]) => {
+      const x = Math.round(cx * 10) / 10
+      const y = Math.round(cy * 10) / 10
+      const rrx = Math.round(rx * 10) / 10
+      const rry = Math.round(ry * 10) / 10
+      const o = (op * k).toFixed(3)
+      return `%3Cellipse cx='${x}' cy='${y}' rx='${rrx}' ry='${rry}' fill='url(%23d)' fill-opacity='${o}'/%3E`
+    })
+    .join('')
+  return `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 200' preserveAspectRatio='none'%3E%3Cdefs%3E%3CradialGradient id='d' cx='0.38' cy='0.3' r='0.6'%3E%3Cstop offset='0' stop-color='rgba(255,255,255,${a(
+    0.92
+  )})'/%3E%3Cstop offset='0.38' stop-color='rgba(214,236,255,${a(
+    0.1
+  )})'/%3E%3Cstop offset='0.8' stop-color='rgba(255,255,255,${a(
+    0.5
+  )})'/%3E%3Cstop offset='1' stop-color='rgba(255,255,255,0)'/%3E%3C/radialGradient%3E%3C/defs%3E${beads}%3C/svg%3E`
+}
+
+// ---------------------------------------------------------------------------
 // Canvas2D approximations for the cover/snapshot generators (the SVG
 // data-URIs would need an async image decode; canvas primitives are the
 // sync equivalent). Deterministic — no Math.random, so covers are stable.
@@ -298,6 +380,8 @@ export function drawTextureApproximations(
     sparkle?: number
     sparkleSize?: number
     sparkleColor?: string
+    droplets?: number
+    dropletSize?: number
   }
 ): void {
   const brushed = clamp(config.brushed ?? 0, 0, 1)
@@ -307,6 +391,8 @@ export function drawTextureApproximations(
   const bubbleDensity = clamp(config.bubbleDensity ?? 1, 0.3, 2.5)
   const sparkle = clamp(config.sparkle ?? 0, 0, 1)
   const sparkleSize = clamp(config.sparkleSize ?? 1, 0.5, 2)
+  const droplets = clamp(config.droplets ?? 0, 0, 1)
+  const dropletSize = clamp(config.dropletSize ?? 1, 0.5, 2)
   const { x, y, w, h } = card
   if (brushed > 0.01) {
     const k = brushed * 0.4
@@ -381,6 +467,39 @@ export function drawTextureApproximations(
       ctx.beginPath()
       ctx.arc(cx, cy, r, 0, Math.PI * 2)
       ctx.fill()
+    }
+    ctx.restore()
+  }
+  if (droplets > 0.01) {
+    // Phase 17 M1: edge-gathered water beads — drawn last (topmost of the
+    // texture stack, mirroring the engine's DOM order under glare/iri).
+    // Beads stretch with the card exactly like the 100% 100% SVG layer.
+    const k = droplets * 0.85
+    ctx.save()
+    for (const [dx, dy, drx, dry, op] of dropletLayout(k, dropletSize)) {
+      const cx = x + (dx / 320) * w
+      const cy = y + (dy / 200) * h
+      const rx = (drx / 320) * w
+      const ry = (dry / 200) * h
+      if (rx < 0.6 || ry < 0.4) continue
+      const a = k * op
+      // Elliptical bead via x-scale; the radial gradient transforms with the
+      // ctx so its geometry stays proportional in scaled space. Same stop
+      // structure as the SVG bake: crisp off-center specular core, faint
+      // cool body, bright rim, fade-to-zero exactly at the fill edge.
+      ctx.save()
+      ctx.translate(cx, cy)
+      ctx.scale(rx / ry, 1)
+      const g = ctx.createRadialGradient(-ry * 0.24, -ry * 0.4, ry * 0.05, 0, 0, ry)
+      g.addColorStop(0, `rgba(255,255,255,${Math.min(1, 0.92 * a).toFixed(3)})`)
+      g.addColorStop(0.38, `rgba(214,236,255,${(0.1 * a).toFixed(3)})`)
+      g.addColorStop(0.8, `rgba(255,255,255,${(0.5 * a).toFixed(3)})`)
+      g.addColorStop(1, 'rgba(255,255,255,0)')
+      ctx.fillStyle = g
+      ctx.beginPath()
+      ctx.arc(0, 0, ry, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.restore()
     }
     ctx.restore()
   }

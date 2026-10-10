@@ -46,6 +46,7 @@ import {
   X,
   Redo2,
   Dices,
+  Eye,
 } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
@@ -219,6 +220,9 @@ type NumericKey = keyof Pick<
   | 'wobble'
   | 'dragBounce'
   | 'dragSquash'
+  | 'droplets'
+  | 'dropletSize'
+  | 'glareAngle'
   | 'glare'
 >
 
@@ -286,16 +290,21 @@ const PARAM_ROWS: {
   { key: 'dragBounce', label: '拖拽回弹', min: 0, max: 1, step: 0.01, fmt: v => (v <= 0.01 ? '关' : `${Math.round(v * 100)}%`) },
   // ---- Phase 16 M1: direction-aware squash & stretch (interaction feel) ----
   { key: 'dragSquash', label: '拖拽形变', min: 0, max: 1, step: 0.01, fmt: v => (v <= 0.01 ? '关' : `${Math.round(v * 100)}%`) },
+  // ---- Phase 17 M1: condensation droplets (edge-gathered water beads) ----
+  { key: 'droplets', label: '凝雾水珠', min: 0, max: 1, step: 0.01, fmt: v => (v <= 0.01 ? '关' : `${Math.round(v * 100)}%`) },
+  { key: 'dropletSize', label: '水珠尺度', min: 0.5, max: 2, step: 0.05, fmt: v => `${v.toFixed(2)}×` },
   // ---- Phase 16 M3: glare sweep (period shortens with intensity) ----
   { key: 'glare', label: '反光扫掠', min: 0, max: 1, step: 0.01, fmt: v => (v <= 0.01 ? '关' : `${(9 - 7 * v).toFixed(1)}s`) },
+  // ---- Phase 17 M2: glare band direction (115° = the Phase 16 default) ----
+  { key: 'glareAngle', label: '光带角度', min: 0, max: 360, step: 5, fmt: v => `${v}°` },
 ]
 
 /** #92/#115 root-cause fix: the phase label lives in ONE place — the header
  *  badge and the footer text both derive from it, so a new phase can never
  *  leave one of the two stale again. */
-const PHASE_LABEL = 'Phase 16 · 形变与镜面'
+const PHASE_LABEL = 'Phase 17 · 凝雾与光带'
 const PHASE_FOOTER =
-  '第十六阶段 · 形变与镜面 / 拖拽形变 · 快捷键自定义 · 反光扫掠'
+  '第十七阶段 · 凝雾与光带 / 凝雾水珠 · 光带角度 · 导出实时预览'
 
 /** Map a stage background option to the canvas cover generator spec. */
 function coverSpec(b: BackgroundOption): CoverBackgroundSpec {
@@ -371,6 +380,12 @@ const RANDOM_RANGES: Record<NumericKey, [number, number]> = {
   dragSquash: [0, 0],
   // The glare sweep is visible motion — opt-in like every animation.
   glare: [0, 0],
+  // Phase 17: condensation is a texture state (not motion) — randomizes
+  // tastefully like frost/brushed; the glare band direction follows the
+  // brushedAngle convention and sweeps the full circle.
+  droplets: [0, 0.55],
+  dropletSize: [0.6, 1.5],
+  glareAngle: [0, 360],
 }
 
 /** Phase 4 M3: variant jitter amplitude (±15% of the current value). */
@@ -756,6 +771,7 @@ function ExportPanel({
   const [format, setFormat] = useState<ExportFormatId>('css')
   const [copied, setCopied] = useState<string | null>(null)
   const [snapBusy, setSnapBusy] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const current = EXPORT_FORMATS.find(f => f.id === format) ?? EXPORT_FORMATS[0]
@@ -826,6 +842,40 @@ function ExportPanel({
     } finally {
       setSnapBusy(false)
     }
+  }, [config, bg])
+
+  /** Phase 17 M3: the live-preview document — the REAL exported CSS rendered
+   *  inside a sandboxed (script-less) iframe, so what the user sees is
+   *  byte-for-byte what they will paste. The stage mirrors the lab's current
+   *  background (image stages resolve against the page origin — srcdoc has
+   *  no base URL, so relative paths would 404). Built lazily, only while the
+   *  dialog is open — `window` is touched for the image URL resolution and
+   *  the panel must stay SSR-safe. */
+  const buildPreviewDoc = useCallback(() => {
+    const css = configToCss(config)
+    const stageBg = bg.url
+      ? typeof window !== 'undefined'
+        ? `url("${new URL(bg.url, window.location.origin).href}")`
+        : bg.thumb
+      : bg.css ?? bg.thumb
+    const ink = bg.dark ? '#f8fafc' : '#0f172a'
+    const muted = bg.dark ? 'rgba(248,250,252,0.78)' : 'rgba(15,23,42,0.72)'
+    const chipBorder = bg.dark ? 'rgba(248,250,252,0.35)' : 'rgba(15,23,42,0.25)'
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>
+${css}
+html,body{margin:0;padding:0;min-height:100vh;overflow:hidden;}
+.stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:${stageBg};background-size:cover;background-position:center;font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;}
+.card{width:min(380px,84vw);padding:30px 34px;}
+.card h3{margin:0 0 10px;font-size:17px;font-weight:600;color:${ink};letter-spacing:.01em;}
+.card p{margin:0;font-size:12.5px;line-height:1.7;color:${muted};}
+.card code{font-family:ui-monospace,monospace;font-size:11px;padding:1px 5px;border-radius:5px;background:${bg.dark ? 'rgba(248,250,252,0.14)' : 'rgba(15,23,42,0.08)'};}
+.chips{display:flex;gap:8px;margin-top:18px;flex-wrap:wrap;}
+.chip{font-size:10.5px;padding:3px 10px;border-radius:999px;border:1px solid ${chipBorder};color:${ink};}
+</style></head><body><div class="stage"><div class="liquid-glass"><div class="card">
+<h3>导出 CSS 实时预览</h3>
+<p>这张卡片完全由当前导出的 <code>.liquid-glass</code> 渲染——backdrop 模糊、纹理叠层、辉光投影与全部动画（扫掠 / 上升 / 果冻形变）都在 iframe 沙箱里活体运行。边缘位移折射是 JS 引擎专属能力，导出说明注释中已注明。</p>
+<div class="chips"><span class="chip">backdrop-filter</span><span class="chip">textures</span><span class="chip">animations</span></div>
+</div></div></div></body></html>`
   }, [config, bg])
 
   const copyText = useCallback(
@@ -905,6 +955,44 @@ function ExportPanel({
         )}
         复制 {current.label} 代码
       </Button>
+
+      {/* Phase 17 M3: live preview — the exported CSS rendered in a
+          script-less sandboxed iframe, byte-identical to the copy above. */}
+      <Button
+        size="sm"
+        variant="outline"
+        className="w-full gap-1.5"
+        onClick={() => setPreviewOpen(true)}
+        data-testid="preview-export"
+      >
+        <Eye className="h-3.5 w-3.5" />
+        预览导出效果
+      </Button>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-1.5 text-sm">
+              <Eye className="h-4 w-4" aria-hidden />
+              导出实时预览
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              沙箱 iframe 内以当前导出 CSS 渲染的
+              <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-[10px]">.liquid-glass</code>
+              卡片——与复制到剪贴板的代码逐字节一致；动画活体运行。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="overflow-hidden rounded-xl border border-border shadow-inner">
+            <iframe
+              title="导出 CSS 实时预览"
+              sandbox=""
+              srcDoc={previewOpen ? buildPreviewDoc() : undefined}
+              className="block h-[440px] w-full bg-black"
+              data-testid="preview-iframe"
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Separator />
 
