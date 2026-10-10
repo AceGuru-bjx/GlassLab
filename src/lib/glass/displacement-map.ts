@@ -1,8 +1,8 @@
 /*
  * Displacement map generator — TypeScript port of Kyant0/AndroidLiquidGlass.
  *
- * Source: https://github.com/Kyant0/AndroidLiquidGlass (kmp branch)
- * Files:  backdrop/src/commonMain/kotlin/com/kyant/backdrop/internal/Shaders.kt
+ * Source: https://github.com/Kyant0/AndroidLiquidGlass (android branch)
+ * Files:  backdrop/src/main/java/com/kyant/backdrop/Shaders.kt
  * License: Apache-2.0, Copyright 2025 Kyant
  *
  * The original AGSL shader computes, for every pixel of a rounded rect:
@@ -11,9 +11,25 @@
  *   grad    = normalize(gradSdRoundedRect(...) + depthEffect * normalize(centeredCoord))
  *   refract = coord + d * grad
  *
- * For the web we bake the vector field `d * grad` into an 8-bit RG
- * displacement map consumed by SVG feDisplacementMap, so the exact same
- * optical profile runs in the browser.
+ * The dispersion variant (RoundedRectRefractionWithDispersionShaderString)
+ * adds a quadrupolar spectral offset sampled at 7 wavelengths:
+ *   quad    = (centeredCoord.x * centeredCoord.y) / (halfSize.x * halfSize.y)
+ *   spread  = chromaticAberration * quad
+ *   taps    = refract + t * d * grad * spread,  t ∈ {+1, +2/3, +1/3, 0, -1/3, -2/3, -1}
+ *
+ * For the web we bake the two vector fields into 8-bit PNG displacement maps
+ * consumed by SVG feDisplacementMap, so the exact same optical profile runs
+ * in the browser:
+ *   - `base`: R = d·grad.x, G = d·grad.y          (shared refraction vector)
+ *   - `quad`: R = quad·d·grad.x, G = quad·d·grad.y (spectral spread vector)
+ *
+ * Encoding: byte = (displacement / refractionAmount) * 0.5 + 0.5, per axis,
+ * so an feDisplacementMap with scale = 2 * refractionAmount reproduces the
+ * base field, and scale = 2 * refractionAmount * k * t reproduces the t-th
+ * spectral tap of an aberration strength k.
+ *
+ * Both maps are baked in a single loop pass; alpha stays 255 in each PNG so
+ * premultiplied decode paths can never distort the encoded channels.
  */
 
 export interface DisplacementMapOptions {
@@ -31,6 +47,13 @@ export interface DisplacementMapOptions {
   depthEffect: boolean
   /** Render scale for extra crispness (1 = CSS px resolution) */
   scale?: number
+}
+
+export interface DisplacementMaps {
+  /** Base refraction vector field — R = x, G = y */
+  base: string
+  /** Quadrupolar spectral vector field — R = quad·x, G = quad·y */
+  quad: string
 }
 
 /** Kyant0 SDF: distance to a rounded rect, negative inside. */
@@ -80,13 +103,16 @@ function circleMap(x: number): number {
 }
 
 /**
- * Renders the displacement vector field into a PNG data URL.
+ * Renders both displacement vector fields into PNG data URLs.
  *
- * Encoding: byte = (displacement / refractionAmount) * 0.5 + 0.5, per axis,
- * so an feDisplacementMap with scale = 2 * refractionAmount reproduces the
- * original field. R channel -> x displacement, G channel -> y displacement.
+ * Base encoding: byte = (displacement / refractionAmount) * 0.5 + 0.5, per
+ * axis, so an feDisplacementMap with scale = 2 * refractionAmount reproduces
+ * the original field. R channel -> x displacement, G channel -> y
+ * displacement. The quad map uses the same normalization, so the t-th
+ * spectral tap (aberration k) is reproduced by scale = 2 * refractionAmount
+ * * k * t.
  */
-export function renderDisplacementMap(opts: DisplacementMapOptions): string {
+export function renderDisplacementMaps(opts: DisplacementMapOptions): DisplacementMaps {
   const {
     width,
     height,
@@ -109,14 +135,20 @@ export function renderDisplacementMap(opts: DisplacementMapOptions): string {
   const amount = Math.max(0.0001, refractionAmount * scale)
   const depth = depthEffect ? 1 : 0
 
-  const canvas = document.createElement('canvas')
-  canvas.width = w
-  canvas.height = h
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return ''
+  const canvasBase = document.createElement('canvas')
+  canvasBase.width = w
+  canvasBase.height = h
+  const canvasQuad = document.createElement('canvas')
+  canvasQuad.width = w
+  canvasQuad.height = h
+  const ctxBase = canvasBase.getContext('2d')
+  const ctxQuad = canvasQuad.getContext('2d')
+  if (!ctxBase || !ctxQuad) return { base: '', quad: '' }
 
-  const img = ctx.createImageData(w, h)
-  const data = img.data
+  const imgBase = ctxBase.createImageData(w, h)
+  const imgQuad = ctxQuad.createImageData(w, h)
+  const dataB = imgBase.data
+  const dataQ = imgQuad.data
 
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
@@ -146,16 +178,25 @@ export function renderDisplacementMap(opts: DisplacementMapOptions): string {
         dy = d * gy
       }
 
+      // Kyant0 dispersion quadrupole: strongest at the corners, sign flips
+      // per quadrant, exactly zero along the axes.
+      const quad = (cx * cy) / (halfW * halfH)
+
       const i = (y * w + x) * 4
-      data[i] = clampByte((dx / amount) * 127.5 + 127.5)
-      data[i + 1] = clampByte((dy / amount) * 127.5 + 127.5)
-      data[i + 2] = 128
-      data[i + 3] = 255
+      dataB[i] = clampByte((dx / amount) * 127.5 + 127.5)
+      dataB[i + 1] = clampByte((dy / amount) * 127.5 + 127.5)
+      dataB[i + 2] = 128
+      dataB[i + 3] = 255
+      dataQ[i] = clampByte(((quad * dx) / amount) * 127.5 + 127.5)
+      dataQ[i + 1] = clampByte(((quad * dy) / amount) * 127.5 + 127.5)
+      dataQ[i + 2] = 128
+      dataQ[i + 3] = 255
     }
   }
 
-  ctx.putImageData(img, 0, 0)
-  return canvas.toDataURL('image/png')
+  ctxBase.putImageData(imgBase, 0, 0)
+  ctxQuad.putImageData(imgQuad, 0, 0)
+  return { base: canvasBase.toDataURL('image/png'), quad: canvasQuad.toDataURL('image/png') }
 }
 
 function clampByte(v: number): number {

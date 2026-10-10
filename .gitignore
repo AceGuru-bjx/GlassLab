@@ -31,3 +31,4 @@ tsconfig.tsbuildinfo
 
 # sandbox tool results
 tool-results/
+src/app/api/route.ts

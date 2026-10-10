@@ -235,7 +235,9 @@ const MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 const RANDOM_RANGES: Record<NumericKey, [number, number]> = {
   refraction: [20, 70],
   height: [10, 70],
-  dispersion: [0, 0.5],
+  // The 7-tap quadrupolar dispersion is corner-localized (axes stay clean),
+  // so strong values remain tasteful — upstream runs it at full strength.
+  dispersion: [0, 0.85],
   blur: [2, 20],
   saturation: [70, 200],
   cornerRadius: [8, 48],
@@ -1261,7 +1263,7 @@ export function GlassLab() {
           </div>
           <div className="flex items-center gap-2">
             <span className="hidden rounded-full border border-teal-500/30 bg-teal-500/10 px-2.5 py-1 text-[10px] font-medium text-teal-600 sm:inline-block">
-              Phase 6 · 快照导出与预设互通进行中
+              Phase 7 · kyant0 七采样色散对齐
             </span>
             {sessionStatus === 'loading' ? (
               <div className="h-8 w-20 animate-pulse rounded-lg bg-muted" aria-hidden />
@@ -1673,7 +1675,7 @@ export function GlassLab() {
 
                     {/* corner hint */}
                     <div className="absolute bottom-3 left-3 max-w-[60%] truncate rounded-md bg-black/35 px-2 py-1 text-[10px] text-white backdrop-blur-sm">
-                      {bg.name} · 位移贴图 {config.refraction}px · 色散{' '}
+                      {bg.name} · 位移贴图 {config.refraction}px · 7-tap 色散{' '}
                       {Math.round(config.dispersion * 100)}%
                     </div>
                   </>
@@ -2034,7 +2036,7 @@ export function GlassLab() {
             </a>{' '}
             (Apache-2.0)
           </span>
-          <span>第六阶段 · PNG 快照导出 / 预设视图筛选 / 配置文件导入导出</span>
+          <span>第七阶段 · 7-tap 四极光谱色散对齐 / 样式库 34 款 / vendored backdrop 同步</span>
         </div>
       </footer>
     </div>

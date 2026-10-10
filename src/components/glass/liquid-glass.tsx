@@ -5,9 +5,18 @@
  *
  * Upstream: https://github.com/Kyant0/AndroidLiquidGlass (Apache-2.0)
  * The rounded-rect refraction / dispersion shader (AGSL) is re-expressed as:
- *   1. a canvas-baked displacement map (see lib/glass/displacement-map.ts)
- *   2. an SVG filter chain: feImage -> feDisplacementMap (x3 spectral taps)
+ *   1. canvas-baked displacement maps (see lib/glass/displacement-map.ts)
+ *      — `base` = refraction vector field, `quad` = quadrupolar spectral field
+ *   2. an SVG filter chain reproducing the upstream 7-tap dispersion:
+ *      feImage(base) -> feDisplacementMap (refraction)
+ *      + per wavelength t ∈ {+1, +2/3, +1/3, 0, -1/3, -2/3, -1}:
+ *          feDisplacementMap(quad, scale = 2·amount·k·t)  (spectral offset)
+ *          feColorMatrix (upstream channel weights)
+ *        accumulated with feComposite(arithmetic k2=k3=1)
  *      -> feGaussianBlur -> feColorMatrix(saturate)
+ *      Upstream weights (Shaders.kt): R=(red+orange+yellow)/3.5 + purple/7,
+ *      G=orange/7+(yellow+green+cyan)/3.5, B=(cyan+blue+purple)/3, A=all/7 —
+ *      each channel's weights sum to exactly 1.
  *   3. a CSS fresnel rim highlight (Kyant0: HighlightStyle.Default, 45°)
  */
 
@@ -21,7 +30,7 @@ import {
   useState,
 } from 'react'
 import { withAlpha } from '@/lib/glass/color'
-import { renderDisplacementMap } from '@/lib/glass/displacement-map'
+import { renderDisplacementMaps } from '@/lib/glass/displacement-map'
 import type { GlassConfig } from '@/lib/glass/presets'
 
 export interface LiquidGlassProps {
@@ -51,6 +60,50 @@ function supportsSvgBackdrop(): boolean {
   )
 }
 
+// ---------------------------------------------------------------------------
+// Kyant0 7-tap spectral weights (RoundedRectRefractionWithDispersionShader):
+//   red    +1  → R 1/3.5                     A 1/7
+//   orange +2/3 → R 1/3.5, G 1/7              A 1/7
+//   yellow +1/3 → R 1/3.5, G 1/3.5            A 1/7
+//   green   0  →              G 1/3.5         A 1/7
+//   cyan  -1/3 →              G 1/3.5, B 1/3 A 1/7
+//   blue  -2/3 →                         B 1/3 A 1/7
+//   purple -1  → R 1/7,              B 1/3    A 1/7
+// Each column sums to 1, so the arithmetic accumulation needs no clamp.
+// ---------------------------------------------------------------------------
+const W_35 = 1 / 3.5
+const W_3 = 1 / 3
+const W_7 = 1 / 7
+
+/** Row-major feColorMatrix values: keep only the weighted channels of a tap. */
+function tapMatrix(wr: number, wg: number, wb: number): string {
+  return [
+    wr.toFixed(8), '0', '0', '0', '0',
+    '0', wg.toFixed(8), '0', '0', '0',
+    '0', '0', wb.toFixed(8), '0', '0',
+    '0', '0', '0', W_7.toFixed(8), '0',
+  ].join(' ')
+}
+
+const TAP_MATRIX_RED = tapMatrix(W_35, 0, 0)
+const TAP_MATRIX_ORANGE = tapMatrix(W_35, W_7, 0)
+const TAP_MATRIX_YELLOW = tapMatrix(W_35, W_35, 0)
+const TAP_MATRIX_GREEN = tapMatrix(0, W_35, 0)
+const TAP_MATRIX_CYAN = tapMatrix(0, W_35, W_3)
+const TAP_MATRIX_BLUE = tapMatrix(0, 0, W_3)
+const TAP_MATRIX_PURPLE = tapMatrix(W_7, 0, W_3)
+
+/** The 7 spectral tap offsets, in the upstream order. */
+const SPECTRAL_TAPS = [
+  { key: 'Red', t: 1, matrix: TAP_MATRIX_RED },
+  { key: 'Orange', t: 2 / 3, matrix: TAP_MATRIX_ORANGE },
+  { key: 'Yellow', t: 1 / 3, matrix: TAP_MATRIX_YELLOW },
+  { key: 'Green', t: 0, matrix: TAP_MATRIX_GREEN },
+  { key: 'Cyan', t: -1 / 3, matrix: TAP_MATRIX_CYAN },
+  { key: 'Blue', t: -2 / 3, matrix: TAP_MATRIX_BLUE },
+  { key: 'Purple', t: -1, matrix: TAP_MATRIX_PURPLE },
+] as const
+
 function LiquidGlassImpl({
   config,
   children,
@@ -61,21 +114,15 @@ function LiquidGlassImpl({
 }: LiquidGlassProps) {
   const rawId = useId().replace(/[^a-zA-Z0-9]/g, '')
   const filterId = `lg-${rawId}`
-  const blurId = `b-${rawId}`
   const mapId = `m-${rawId}`
-  const dispRId = `dr-${rawId}`
-  const dispGId = `dg-${rawId}`
-  const dispBId = `db-${rawId}`
-  const cRId = `cr-${rawId}`
-  const cGId = `cg-${rawId}`
-  const cBId = `cb-${rawId}`
-  const rgId = `rg-${rawId}`
+  const quadId = `q-${rawId}`
   const satId = `st-${rawId}`
   const noiseId = `nz-${rawId}`
 
   const hostRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
   const [mapUrl, setMapUrl] = useState('')
+  const [quadUrl, setQuadUrl] = useState('')
   const [svgOk, setSvgOk] = useState(true)
 
   useEffect(() => {
@@ -102,7 +149,8 @@ function LiquidGlassImpl({
     return () => ro.disconnect()
   }, [])
 
-  // Bake the Kyant0 displacement vector field (rAF-debounced).
+  // Bake the Kyant0 displacement vector fields (rAF-debounced): the base
+  // refraction map and the quadrupolar spectral map, in one loop pass.
   useEffect(() => {
     let raf = 0
     let cancelled = false
@@ -110,9 +158,10 @@ function LiquidGlassImpl({
       raf = 0
       if (size.w < 4 || size.h < 4 || disabled) {
         setMapUrl('')
+        setQuadUrl('')
         return
       }
-      const url = renderDisplacementMap({
+      const maps = renderDisplacementMaps({
         width: size.w,
         height: size.h,
         cornerRadius: config.cornerRadius,
@@ -121,7 +170,10 @@ function LiquidGlassImpl({
         depthEffect: config.depthEffect,
         scale: mapScale,
       })
-      if (!cancelled) setMapUrl(url)
+      if (!cancelled) {
+        setMapUrl(maps.base)
+        setQuadUrl(maps.quad)
+      }
     }
     raf = requestAnimationFrame(bake)
     return () => {
@@ -156,8 +208,11 @@ function LiquidGlassImpl({
 
   // ---------- SVG filter chain ----------
   const scale = Math.max(0.001, config.refraction * 2)
+  // Spectral tap scale magnitude: scale · k reproduces the full-strength
+  // quadrupolar spread of upstream's chromaticAberration=1 shader.
   const k = Math.max(0, Math.min(1, config.dispersion))
   const useDispersion = k > 0.01
+  const spectralScale = Math.max(0.001, config.refraction * 2) * k
   const blurReady = mapUrl !== '' && size.w > 4
   const active = !disabled && svgOk && blurReady
 
@@ -232,22 +287,35 @@ function LiquidGlassImpl({
             colorInterpolationFilters="sRGB"
           >
             {blurReady && (
-              <feImage
-                id={mapId}
-                href={mapUrl}
-                x={0}
-                y={0}
-                width={size.w}
-                height={size.h}
-                result="map"
-                preserveAspectRatio="none"
-              />
+              <>
+                <feImage
+                  id={mapId}
+                  href={mapUrl}
+                  x={0}
+                  y={0}
+                  width={size.w}
+                  height={size.h}
+                  result="map"
+                  preserveAspectRatio="none"
+                />
+                {useDispersion && (
+                  <feImage
+                    id={quadId}
+                    href={quadUrl}
+                    x={0}
+                    y={0}
+                    width={size.w}
+                    height={size.h}
+                    result="quad"
+                    preserveAspectRatio="none"
+                  />
+                )}
+              </>
             )}
 
             {active && !useDispersion && (
               <>
                 <feDisplacementMap
-                  id={dispGId}
                   in="SourceGraphic"
                   in2="map"
                   scale={scale}
@@ -256,7 +324,6 @@ function LiquidGlassImpl({
                   result="disp"
                 />
                 <feGaussianBlur
-                  id={blurId}
                   in="disp"
                   stdDeviation={config.blur}
                   result="soft"
@@ -272,64 +339,67 @@ function LiquidGlassImpl({
 
             {active && useDispersion && (
               <>
-                {/* Spectral approximation of Kyant0's 7-tap dispersion:
-                    R pulled towards +d, B towards -d, G centered. */}
+                {/*
+                  Kyant0 7-tap spectral dispersion:
+                  base refraction once, then each wavelength samples the
+                    result offset along the quadrupolar field by t·k, and
+                    contributes its channel weights; arithmetic adds the
+                    taps (each channel's weights sum to 1).
+                */}
                 <feDisplacementMap
-                  id={dispRId}
-                  in="SourceGraphic"
-                  in2="map"
-                  scale={scale * (1 + k * 0.5)}
-                  xChannelSelector="R"
-                  yChannelSelector="G"
-                  result="dispR"
-                />
-                <feColorMatrix
-                  id={cRId}
-                  in="dispR"
-                  type="matrix"
-                  values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0 1"
-                  result="cR"
-                />
-                <feDisplacementMap
-                  id={dispGId}
                   in="SourceGraphic"
                   in2="map"
                   scale={scale}
                   xChannelSelector="R"
                   yChannelSelector="G"
-                  result="dispG"
+                  result="base"
                 />
-                <feColorMatrix
-                  id={cGId}
-                  in="dispG"
-                  type="matrix"
-                  values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 0 1"
-                  result="cG"
-                />
-                <feDisplacementMap
-                  id={dispBId}
-                  in="SourceGraphic"
-                  in2="map"
-                  scale={scale * (1 - k * 0.5)}
-                  xChannelSelector="R"
-                  yChannelSelector="G"
-                  result="dispB"
-                />
-                <feColorMatrix
-                  id={cBId}
-                  in="dispB"
-                  type="matrix"
-                  values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 0 1"
-                  result="cB"
-                />
-                <feBlend id={rgId} in="cR" in2="cG" mode="screen" result="rg" />
-                <feBlend in="rg" in2="cB" mode="screen" result="disp" />
+                {/* The green tap (t=0) needs no spectral offset — its color
+                    matrix reads the shared base refraction directly. */}
+                {SPECTRAL_TAPS.map(tap =>
+                  tap.t === 0 ? null : (
+                    <feDisplacementMap
+                      key={tap.key}
+                      in="base"
+                      in2="quad"
+                      scale={spectralScale * tap.t}
+                      xChannelSelector="R"
+                      yChannelSelector="G"
+                      result={`d${tap.key}`}
+                    />
+                  )
+                )}
+                {SPECTRAL_TAPS.map(tap => (
+                  <feColorMatrix
+                    key={tap.key}
+                    in={tap.t === 0 ? 'base' : `d${tap.key}`}
+                    type="matrix"
+                    values={tap.matrix}
+                    result={`w${tap.key}`}
+                  />
+                ))}
+                {SPECTRAL_TAPS.map((tap, ti) =>
+                  ti === 0 ? null : (
+                    <feComposite
+                      key={tap.key}
+                      in={ti === 1 ? 'wRed' : `acc${ti - 1}`}
+                      in2={`w${tap.key}`}
+                      operator="arithmetic"
+                      k1={0}
+                      k2={1}
+                      k3={1}
+                      k4={0}
+                      result={`acc${ti}`}
+                    />
+                  )
+                )}
                 <feGaussianBlur
-                  in="disp"
+                  in="acc6"
                   stdDeviation={config.blur}
                   result="soft"
                 />
                 <feColorMatrix
+                  id={satId}
                   in="soft"
                   type="saturate"
                   values={`${config.saturation / 100}`}

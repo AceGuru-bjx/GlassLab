@@ -1,7 +1,7 @@
 # 玻璃实验室 GlassLab
 
 Kyant0/AndroidLiquidGlass（Apache-2.0）液态玻璃算法的 **Web 移植与实时调参实验室**。
-上游 AGSL 着色器被逐式移植为 canvas 位移贴图 + SVG 滤镜链（feImage → feDisplacementMap ×3 光谱色散 → feGaussianBlur → feColorMatrix），配合菲涅尔边缘高光，可在浏览器中实时折射/调参/保存预设。
+上游 AGSL 着色器被逐式移植为 canvas 位移贴图 + SVG 滤镜链：基准折射位移场 + 四极光谱场在同一循环内烘焙，由 feImage → feDisplacementMap（基准）→ 7-tap 光谱采样（红/橙/黄/绿/青/蓝/紫各按 t∈{+1,+2/3,+1/3,0,−1/3,−2/3,−1} 偏移四极场）→ feColorMatrix 通道权重 → feComposite 累加 → feGaussianBlur → feColorMatrix 饱和度，与上游 `RoundedRectRefractionWithDispersionShaderString` 的通道权重表逐项一致，配合菲涅尔边缘高光，可在浏览器中实时折射/调参/保存预设。
 
 ## 技术栈
 
@@ -54,13 +54,14 @@ CI（`.github/workflows/ci.yml`）三道门禁 + 干净环境冒烟：
 
 ```
 src/app/                 # 页面外壳 + /api/presets CRUD（zod 校验、错误语义化）
-src/components/glass/    # LiquidGlass 滤镜链 / 实验舞台 / 演示卡片
-src/lib/glass/           # GlassConfig 预设（12 款）+ 位移贴图烘焙
+src/components/glass/    # LiquidGlass 7-tap 滤镜链 / 实验舞台 / 演示卡片
+src/lib/glass/           # GlassConfig 预设（34 款）+ 位移/四极双贴图烘焙
 prisma/schema.prisma     # GlassPreset 模型
 .github/workflows/ci.yml # lint/typecheck/build/smoke 四 job
 ```
 
 ## 验收状态
 
-第一阶段全面深度检查（1/5 基础架构 → 5/5 构建部署）已全部闭环：
+历轮全面深度检查（1/5 基础架构 → 5/5 构建部署、五批用户旅程×四轮）均已闭环；
+第七阶段完成 kyant0 上游 7-tap 四极光谱色散对齐与样式库扩展（34 款）。
 缺陷一律走 Issue → 修复 → CI 门禁 → 关闭 流程，记录见 [Issues](https://github.com/AceGuru-bjx/GlassLab/issues) 与 `worklog.md`。
