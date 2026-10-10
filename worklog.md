@@ -421,3 +421,33 @@ Stage Summary:
 未解决/风险与下一步建议：
 - PR #364 仍待 Ultra-Guru 维护者评审（正常等待，无新评论）
 - 下轮候选：①投影颜色参数化（当前固定深蓝黑，可开放 tint 联动或自定义）；②光源跟随的惯性/缓动（当前瞬时跳转，可加 lerp 平滑）；③画廊封面的预设局部放大预览（hover 现图 vs 点击大图）；④动效预设专属「动效」分类 tab（现为筛选 chips，可升级为独立分类）；⑤第七轮深度检查（覆盖 Phase 11 新增约 640 行）
+
+---
+Task ID: 18
+Agent: Z.ai Code (webDevReview 定时巡检)
+Task: 巡检轮——QA 冒烟发现 1 互操作 bug #96 后自主开发第十二阶段「触感与光效精修」：光源跟随惯性（#97）/ 投影颜色参数化（#98）/ 画廊放大预览（#99）
+
+Work Log:
+- 前置核实：worklog Task 17 闭环态；git 63411c6 与远程同步、CI 绿、0 open issue、dev server 200、PR #364 open（无人工评审）、本地与远程一致
+- agent-browser 全站 QA 冒烟（10 项全绿）：53 预设（列表/画廊双视图 testid 语义澄清：列表 preset-* / 画廊 gallery-*）/7-tap 引擎 DOM（21 feDisp/18 feComp）/26 滑杆/深海涌动双动画（glow-pulse 2.3s + bubble-rise 4.4s）/导出三格式/撤销 26→24/lightFollow 数学（上 0°/右 90°/下 180°——180° 为 CSS linear-gradient 默认值 CSSOM 序列化省略，非 bug）/画廊懒渲染 33→47/390px 无溢出/全新会话 0 error
+- **发现 bug #96**：`hashPayload` 正则 `^#g=([A-Za-z0-9_-]+)$` 拒绝带 `=` padding 的第三方标准 base64 分享链接（btoa 在 JSON 长度非 4 倍数时产生 padding）→ 静默 return 无 toast 无载入；自产链接（toBase64Url 已 strip padding）不受影响 → 正则放宽 `={0,2}` → 提交 09040b7 → CI 全绿 → 自动关闭
+- 修复验证三重：带 padding 链接深载入逐值精确还原（33/47/0.31/9/300/0.5/22/1.8/true/true）；自产无 padding 回归（742 字符无 padding）；无效载荷仍走「分享链接无效」toast 分支
+- 自主规划第十二阶段「触感与光效精修」（Task 17 候选落地）：建 #97/#98/#99 入 Project Todo
+- M1（#97）光源跟随惯性：`lightSmoothing` 0..1 默认 0.35（仅 lightFollow 开启时生效——存量观感不变）；指针发布目标方位 ref → rAF 追踪循环最短弧指数平滑（τ=smoothing×600ms 帧率无关 `k=1-exp(-dt/τ)`）；收敛自停靠（空舞台零帧）；全链路（GlassConfig/numKeys/zod default 0.35/RANDOM_RANGES [0,0] 交互参数不随机/滑杆 fmt 显示毫秒）
+- M2（#98）投影颜色：`shadowColor` 默认 `#0f172a`（Phase 11 硬编码石板色——存量逐字节等价，仅 alpha 尾零格式 0.150→0.15 数值语义相同）；引擎 backdrop 栈/辉光呼吸 keyframes/cover 1.1×/snapshot 4×/CSS 导出全链路 withAlpha 取色；色板扩 4 格（grid-cols-4）；新增翡翠浮影（#065f46）/暖阳投影（#92400e）→ 53→55 款
+- M3（#99）画廊放大预览：拆 GalleryCard 子组件；hover 120ms 意图延迟/键盘 focus 打开 radix Popover（onOpenAutoFocus preventDefault 防焦点抢夺 blur-close 循环）；同源缓存封面 400×240 全分辨率 + 参数徽章（折射/厚度/色散 tabular-nums）+ 名称描述；**实施中发现并即修 1 个可访问性缺口——焦点留在 trigger 时在 radix DismissableLayer 之外、Escape 不关闭 → 补 trigger onKeyDown 显式处理**
+- E2E 验证矩阵全绿：平滑收敛轨迹实证 179°→102→34→18→10→6→3→2（指数渐近）；smoothing=0 合成 pointermove 瞬时 179°；翡翠浮影 rgba(6,95,70)×3 层/暖阳 rgba(146,64,14)×3/晨光悬浮默认石板 rgba(15,23,42)×3 后向兼容；色板实时换紫 rgba(124,58,237)×3；CSS 导出投影栈 10.0/-17.3/34.0/0.275 数学精确；分享深载入 lightSmoothing 0.6 + shadowColor #065f46 还原；API 矩阵（legacy 201 补默认/注入 400/越界 2.5 400）；画廊预览参数徽章逐值精确（30px/44px/36%）+ focus/Escape/outside-click 三路径；全新会话 55 预设/27 滑杆/0 console error；390px 色板 4 列无溢出
+- 提交 f70b81b 推送 → CI 四门禁全绿 → #97/#98/#99 报告回帖 + 自动关闭 + Project 全 Done；测试数据清理归零
+
+Stage Summary:
+- 第十二阶段三里程碑闭环：光源物理惯性（光有质量的手感）/ 影子染色系统（光效最后一块拼图）/ 画廊放大预览（浏览体验精修）
+- GlassConfig 参数 36→38（+lightSmoothing/shadowColor），全部默认值后向兼容（存量渲染逐字节等价或数值语义等价）
+- 样式库 53→55 款（光影 13）；GitHub issue #96–#99 全闭环、repo 推进至 f70b81b（CI 四门禁全绿）
+- 关键决策：①平滑用「指针发布目标 + 独立 rAF 追踪循环」而非逐事件插值（连续状态更新且收敛后零帧成本）；②shadowColor 默认值取 Phase 11 硬编码原值（非抽象黑色）保证存量字节级等价；③画廊预览复用同源缓存 data-URL（零额外 canvas 生成）；④Popover onOpenAutoFocus 必须 preventDefault（焦点抢夺会 blur-close 死循环）
+- 沉淀陷阱：①**GitHub GraphQL 的 addProjectV2ItemByContentId 已更名 addProjectV2ItemById**（内省 Mutation 字段发现）；②agent-browser 的 hover/mouse-move 在该环境不派发 pointerenter/leave 事件族（radix Slider 聚焦后尤甚）——hover 类交互用合成 MouseEvent 验证；③**radix Slider focus 会触发 scrollIntoView 使页面滚动漂移**——涉及鼠标坐标的测试必须每次重新定位舞台几何；④180deg 渐变 CSSOM 序列化省略角度参数（默认值）——角度断言正则需容错；⑤close 后 open 偶发 about:blank 残留会话——navigate 强制恢复
+- GitHub 产物：issues #96-#99 全闭环（#96 bug 修复 + 三里程碑报告回帖）、Project 四条目 Done、repo 推进至 f70b81b、PR #364 待审（正常等待）
+
+未解决/风险与下一步建议:
+- PR #364 仍待 Ultra-Guru 维护者评审（正常等待，无新评论）
+- lightSmoothing 的 CSS 导出不含（交互态参数，与 lightFollow 同裁决）——若未来导出「交互 demo 页」可一并考虑
+- 下轮候选：①气泡水平漂移（background-position-x 往复）与相位差参数（错落感）；②投影颜色与 tint 联动选项（一键「影子继承染色」）；③光源跟随的 WebGL 级软阴影（当前单层 box-shadow 近似）；④第八轮深度检查（覆盖 Phase 12 新增约 330 行）；⑤导出 React 组件动效 demo 页（Phase 9 遗留候选）
