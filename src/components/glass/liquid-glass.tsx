@@ -282,12 +282,21 @@ function LiquidGlassImpl({
   const shadowIntensity = Math.max(0, Math.min(1, config.shadowIntensity ?? 0))
   const shadowDistance = Math.max(0, Math.min(40, config.shadowDistance ?? 14))
   const shadowSoftness = Math.max(0, Math.min(60, config.shadowSoftness ?? 28))
+  // Phase 12 M2: shadow tint — #0f172a reproduces the Phase 11 hardcoded
+  // slate byte-for-byte (withAlpha emits the same rgba() string).
+  const shadowColor =
+    typeof config.shadowColor === 'string' && config.shadowColor.trim()
+      ? config.shadowColor
+      : '#0f172a'
   const shadowRad = (lightAngleDeg * Math.PI) / 180
   const shadowDx = Math.sin(shadowRad) * shadowDistance
   const shadowDy = -Math.cos(shadowRad) * shadowDistance
   const castShadow =
     shadowIntensity > 0.01
-      ? `${shadowDx.toFixed(1)}px ${shadowDy.toFixed(1)}px ${shadowSoftness.toFixed(1)}px rgba(15, 23, 42, ${(0.5 * shadowIntensity).toFixed(3)})`
+      ? `${shadowDx.toFixed(1)}px ${shadowDy.toFixed(1)}px ${shadowSoftness.toFixed(1)}px ${withAlpha(
+          shadowColor,
+          0.5 * shadowIntensity
+        )}`
       : ''
   // ---- Phase 9 M3: motion system ----
   // Glow breathing: the shadow moves to a dedicated layer whose opacity

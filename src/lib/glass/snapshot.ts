@@ -162,13 +162,18 @@ export async function generateGlassSnapshot(
 
     // Phase 11 M1: directional cast shadow (4× the stage scale, direction
     // along lightAngle — same canvas-coord math as the cover generator).
+    // Phase 12 M2: shadow tint — #0f172a default reproduces Phase 11 exactly.
     const shadowIntensity = Math.max(0, Math.min(1, config.shadowIntensity ?? 0))
     if (shadowIntensity > 0.01) {
       const shadowDistance = Math.max(0, Math.min(40, config.shadowDistance ?? 14))
       const shadowSoftness = Math.max(0, Math.min(60, config.shadowSoftness ?? 28))
+      const shadowColor =
+        typeof config.shadowColor === 'string' && config.shadowColor.trim()
+          ? config.shadowColor
+          : '#0f172a'
       const rad0 = (config.lightAngle * Math.PI) / 180
       ctx.save()
-      ctx.shadowColor = `rgba(15, 23, 42, ${(0.5 * shadowIntensity).toFixed(3)})`
+      ctx.shadowColor = withAlpha(shadowColor, 0.5 * shadowIntensity)
       ctx.shadowOffsetX = Math.sin(rad0) * shadowDistance * 4
       ctx.shadowOffsetY = -Math.cos(rad0) * shadowDistance * 4
       ctx.shadowBlur = shadowSoftness * 4

@@ -61,9 +61,18 @@ function cssBody(config: GlassConfig): string {
   const shadowIntensity = Math.max(0, Math.min(1, config.shadowIntensity ?? 0))
   const shadowDistance = Math.max(0, Math.min(40, config.shadowDistance ?? 14))
   const shadowSoftness = Math.max(0, Math.min(60, config.shadowSoftness ?? 28))
+  // Phase 12 M2: shadow tint — #0f172a keeps legacy exports byte-identical
+  // (withAlpha over a 6-digit hex emits the exact `rgba(15, 23, 42, a)`).
+  const shadowColor =
+    typeof config.shadowColor === 'string' && config.shadowColor.trim()
+      ? config.shadowColor
+      : '#0f172a'
   const castShadow =
     shadowIntensity > 0.01
-      ? `,\n  /* 方向性投影（光源 ${rimAngleDeg}°对侧） */\n  ${(Math.sin((rimAngleDeg * Math.PI) / 180) * shadowDistance).toFixed(1)}px ${(-Math.cos((rimAngleDeg * Math.PI) / 180) * shadowDistance).toFixed(1)}px ${shadowSoftness.toFixed(1)}px rgba(15, 23, 42, ${(0.5 * shadowIntensity).toFixed(3)})`
+      ? `,\n  /* 方向性投影（光源 ${rimAngleDeg}°对侧） */\n  ${(Math.sin((rimAngleDeg * Math.PI) / 180) * shadowDistance).toFixed(1)}px ${(-Math.cos((rimAngleDeg * Math.PI) / 180) * shadowDistance).toFixed(1)}px ${shadowSoftness.toFixed(1)}px ${withAlpha(
+          shadowColor,
+          0.5 * shadowIntensity
+        )}`
       : ''
   // Phase 11 M2: brushedFollow bakes the effective angle (light + 90°) —
   // CSS exports are static, the live link is a lab-only interactive state.
@@ -294,6 +303,7 @@ export function validateConfigObject(raw: unknown): GlassConfig | null {
     'shadowIntensity',
     'shadowDistance',
     'shadowSoftness',
+    'lightSmoothing',
     'edgeBlur',
     'vignette',
     'glowOpacity',
@@ -313,7 +323,8 @@ export function validateConfigObject(raw: unknown): GlassConfig | null {
   if (
     typeof merged.tint !== 'string' ||
     typeof merged.glow !== 'string' ||
-    typeof merged.highlightColor !== 'string'
+    typeof merged.highlightColor !== 'string' ||
+    typeof merged.shadowColor !== 'string'
   ) {
     return null
   }

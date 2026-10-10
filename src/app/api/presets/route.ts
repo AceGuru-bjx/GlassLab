@@ -76,9 +76,15 @@ const glassConfigSchema = z.object({
   shadowIntensity: z.number().min(0).max(1).default(0),
   shadowDistance: z.number().min(0).max(40).default(14),
   shadowSoftness: z.number().min(0).max(60).default(28),
+  // Phase 12 M2: shadow tint — the default is the exact Phase 11 hardcoded
+  // slate, so older payloads and stored rows render byte-identically.
+  shadowColor: colorField(32).default('#0f172a'),
   // Phase 11 M2: interactive light states — export-safe booleans, defaults
   // keep stored rows and older clients identical (follow features off).
   lightFollow: z.boolean().default(false),
+  // Phase 12 M1: light-follow inertial smoothing — only meaningful while
+  // lightFollow is on, so the default cannot alter any stored rendering.
+  lightSmoothing: z.number().min(0).max(1).default(0.35),
   brushedFollow: z.boolean().default(false),
   edgeBlur: z.number().min(0).max(1).default(0),
   vignette: z.number().min(0).max(1).default(0),

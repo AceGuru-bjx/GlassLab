@@ -67,8 +67,15 @@ export interface GlassConfig {
   shadowDistance: number
   /** Phase 11 M1: cast shadow feather radius in px */
   shadowSoftness: number
+  /** Phase 12 M2: cast shadow tint color — default #0f172a is the exact
+   *  Phase 11 hardcoded slate, so existing renders stay byte-identical. */
+  shadowColor: string
   /** Phase 11 M2: pointer becomes the light source (stage interactive) */
   lightFollow: boolean
+  /** Phase 12 M1: light-follow inertial smoothing, 0..1 (0 = instant snap,
+   *  1 = slowest tail). Only meaningful while lightFollow is on — inert in
+   *  every other state, so the default 0.35 cannot change existing presets. */
+  lightSmoothing: number
   /** Phase 11 M2: brushed streaks stay perpendicular to the light */
   brushedFollow: boolean
   /** Phase 5: progressive gaussian blur ring at the glass edges, 0..1 */
@@ -136,7 +143,9 @@ export const DEFAULT_CONFIG: GlassConfig = {
   shadowIntensity: 0,
   shadowDistance: 14,
   shadowSoftness: 28,
+  shadowColor: '#0f172a',
   lightFollow: false,
+  lightSmoothing: 0.35,
   brushedFollow: false,
   edgeBlur: 0,
   vignette: 0,
@@ -1277,6 +1286,63 @@ export const PRESETS: GlassPreset[] = [
       glow: 'rgba(125,211,252,0.25)',
       glowSpread: 30,
       vignette: 0.22,
+    },
+  },
+  // ---------------- Phase 12: tinted-shadow showcase ----------------
+  {
+    id: 'jade-drift',
+    name: '翡翠浮影',
+    desc: '青玉投影，冷光下坠',
+    swatch: 'linear-gradient(160deg,#ecfdf5,#6ee7b7 52%,#047857)',
+    category: '光影',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 30,
+      height: 44,
+      dispersion: 0.36,
+      blur: 4,
+      saturation: 132,
+      cornerRadius: 26,
+      tint: '#064e3b',
+      tintOpacity: 0.22,
+      highlight: 0.9,
+      highlightColor: '#d1fae5',
+      lightAngle: 15,
+      shadowIntensity: 0.65,
+      shadowDistance: 24,
+      shadowSoftness: 38,
+      shadowColor: '#065f46',
+      glow: 'rgba(52,211,153,0.22)',
+      glowSpread: 24,
+      vignette: 0.18,
+    },
+  },
+  {
+    id: 'amber-cast',
+    name: '暖阳投影',
+    desc: '琥珀染影，午后斜阳',
+    swatch: 'linear-gradient(210deg,#fffbeb,#fcd34d 58%,#b45309)',
+    category: '光影',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 27,
+      height: 42,
+      dispersion: 0.28,
+      blur: 3,
+      saturation: 128,
+      cornerRadius: 22,
+      tint: '#78350f',
+      tintOpacity: 0.16,
+      highlight: 0.92,
+      highlightColor: '#fef3c7',
+      lightAngle: 60,
+      shadowIntensity: 0.6,
+      shadowDistance: 26,
+      shadowSoftness: 42,
+      shadowColor: '#92400e',
+      glow: 'rgba(252,211,77,0.2)',
+      glowSpread: 22,
+      vignette: 0.14,
     },
   },
 ]

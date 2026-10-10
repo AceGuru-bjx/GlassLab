@@ -197,6 +197,7 @@ type NumericKey = keyof Pick<
   | 'shadowIntensity'
   | 'shadowDistance'
   | 'shadowSoftness'
+  | 'lightSmoothing'
   | 'edgeBlur'
   | 'vignette'
   | 'glowOpacity'
@@ -240,6 +241,9 @@ const PARAM_ROWS: {
   { key: 'shadowIntensity', label: '投影强度', min: 0, max: 1, step: 0.05, fmt: v => (v <= 0.01 ? '关' : `${Math.round(v * 100)}%`) },
   { key: 'shadowDistance', label: '投影距离', min: 0, max: 40, step: 1, fmt: v => `${v}px` },
   { key: 'shadowSoftness', label: '投影羽化', min: 0, max: 60, step: 1, fmt: v => `${v}px` },
+  // ---- Phase 12 M1: light-follow inertia (0 = instant snap like Phase 11,
+  //      0.35 default tail ≈ 210ms, 1 = a slow weighty 600ms trailing) ----
+  { key: 'lightSmoothing', label: '光源惯性', min: 0, max: 1, step: 0.05, fmt: v => (v <= 0.01 ? '关' : `${Math.round(v * 600)}ms`) },
   // ---- Phase 9 M1: glow system ----
   { key: 'glowOpacity', label: '辉光强度', min: 0, max: 1, step: 0.01, fmt: v => `${Math.round(v * 100)}%` },
   { key: 'glowSpread', label: '辉光范围', min: 0, max: 60, step: 1, fmt: v => `${v}px` },
@@ -303,6 +307,8 @@ const RANDOM_RANGES: Record<NumericKey, [number, number]> = {
   glowPulse: [0, 0],
   rimFlow: [0, 0],
   bubbleRise: [0, 0],
+  // Phase 12: interaction feel params are opt-in too — never randomize.
+  lightSmoothing: [0, 0],
 }
 
 /** Phase 4 M3: variant jitter amplitude (±15% of the current value). */
@@ -486,10 +492,10 @@ function ConfigPanel({
         <div>
           <Label className="text-xs">色彩与光效</Label>
           <p className="text-[10px] text-muted-foreground">
-            染色 / 菲涅尔高光 / 辉光实时取色
+            染色 / 高光 / 辉光 / 投影实时取色
           </p>
         </div>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-4 gap-2">
           {(
             [
               {
@@ -512,6 +518,13 @@ function ConfigPanel({
                 testid: 'glow-color',
                 value: toHexColor(config.glow),
                 pick: (hex: string) => onChange({ glow: withAlpha(hex, 0.32) }),
+              },
+              {
+                key: 'shadowColor',
+                label: '投影',
+                testid: 'shadow-color',
+                value: toHexColor(config.shadowColor),
+                pick: (hex: string) => onChange({ shadowColor: hex }),
               },
             ] as const
           ).map(f => (
@@ -1005,6 +1018,51 @@ export function GlassLab() {
   // the pivot for the pointer→light angle.
   const dragCardRef = useRef<HTMLDivElement>(null)
   const lightFollowRaf = useRef(0)
+  // Phase 12 M1: inertial tracking — the pointer publishes a target bearing
+  // here; the smoothing loop eases the rendered angle toward it.
+  const lightTargetRef = useRef<number | null>(null)
+  const lightTrackRaf = useRef(0)
+  const compareOnRef = useRef(compareOn)
+  compareOnRef.current = compareOn
+
+  // Phase 12 M1: inertial light tracking. The pointer publishes a target
+  // bearing; an rAF loop eases the live angle toward it along the shortest
+  // arc with a frame-rate-independent exponential step — τ maps
+  // lightSmoothing 0→~0ms (instant snap, byte-identical to Phase 11) and
+  // 1→600ms (a slow, weighty tail). The loop parks itself once the angle
+  // converges so an idle stage costs zero frames; follow updates keep their
+  // Phase 11 contract of never touching the undo stack.
+  const startLightTracking = useCallback(() => {
+    let last = performance.now()
+    const step = (now: number) => {
+      lightTrackRaf.current = 0
+      const target = lightTargetRef.current
+      if (target == null || !configRef.current.lightFollow || compareOnRef.current) {
+        lightTargetRef.current = null
+        return
+      }
+      const smoothing = Math.min(1, Math.max(0, configRef.current.lightSmoothing ?? 0.35))
+      const dt = Math.max(1, now - last)
+      last = now
+      const current = configRef.current.lightAngle ?? 0
+      // Shortest-arc delta, normalised to −180..180 so the easing never
+      // sweeps the long way round (350°→10° crosses 0°, not 180°).
+      const delta = ((((target - current) % 360) + 540) % 360) - 180
+      const tau = smoothing * 600 + 0.01
+      const k = 1 - Math.exp(-dt / tau)
+      let next = current + delta * k
+      if (Math.abs(delta) < 0.4 || k >= 1) next = target
+      next = ((Math.round(next) % 360) + 360) % 360
+      if (next !== Math.round(current)) {
+        setConfig(c =>
+          Math.round(c.lightAngle ?? 0) === next ? c : { ...c, lightAngle: next }
+        )
+        setActivePreset('')
+      }
+      if (next !== target) lightTrackRaf.current = requestAnimationFrame(step)
+    }
+    lightTrackRaf.current = requestAnimationFrame(step)
+  }, [])
 
   // Pointer-as-light: on every stage pointer move (lightFollow on, compare
   // off), the light angle becomes the bearing from the card centre to the
@@ -1032,16 +1090,19 @@ export function GlassLab() {
         let deg = Math.round((Math.atan2(dx, dy) * 180) / Math.PI) % 360
         if (deg < 0) deg += 360
         if (Math.round(configRef.current.lightAngle) === deg) return
-        setConfig(c => ({ ...c, lightAngle: deg }))
-        setActivePreset('')
+        // Phase 12 M1: publish the target; the inertial loop eases toward it.
+        lightTargetRef.current = deg
+        if (!lightTrackRaf.current) startLightTracking()
       })
     },
-    [compareOn]
+    [compareOn, startLightTracking]
   )
-  // Release any in-flight follow frame on unmount.
+  // Release any in-flight follow/tracking frames on unmount — the tracking
+  // loop also self-parks when compare mode engages or follow turns off.
   useEffect(
     () => () => {
       if (lightFollowRaf.current) cancelAnimationFrame(lightFollowRaf.current)
+      if (lightTrackRaf.current) cancelAnimationFrame(lightTrackRaf.current)
     },
     []
   )
@@ -1490,7 +1551,7 @@ export function GlassLab() {
           </div>
           <div className="flex items-center gap-2">
             <span className="hidden rounded-full border border-teal-500/30 bg-teal-500/10 px-2.5 py-1 text-[10px] font-medium text-teal-600 sm:inline-block">
-              Phase 11 · 光影物理与灵感画廊
+              Phase 12 · 触感与光效精修
             </span>
             {sessionStatus === 'loading' ? (
               <div className="h-8 w-20 animate-pulse rounded-lg bg-muted" aria-hidden />
@@ -2326,7 +2387,7 @@ export function GlassLab() {
             </a>{' '}
             (Apache-2.0)
           </span>
-          <span>第十一阶段 · 光影物理与灵感画廊 / 方向性投影 · 光源跟随 · 样式库 {PRESETS.length} 款</span>
+          <span>第十二阶段 · 触感与光效精修 / 光源惯性 · 投影染色 · 预览放大 · 样式库 {PRESETS.length} 款</span>
         </div>
       </footer>
     </div>
