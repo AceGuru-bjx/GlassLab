@@ -83,8 +83,14 @@ const COVER_DATA_URL_PATTERN =
 const PRESET_LIST_LIMIT = 100
 
 /**
- * GET query params (Phase 4 M1). `q` filters by name substring; empty/absent
- * q means "no filter" rather than an error. Unknown `sort` values are 400.
+ * GET query params (Phase 4 M1; Phase 6 M2 adds `view`). `q` filters by name
+ * substring; empty/absent q means "no filter" rather than an error. Unknown
+ * `sort`/`view` values are 400.
+ *
+ * `view` controls the visibility slice:
+ *  - all (default): signed-in → own ∪ public; guest → public
+ *  - mine: signed-in → own only; guest → empty set (no ownership concept)
+ *  - public: public rows only (userId IS NULL)
  */
 const listQuerySchema = z.object({
   q: z
@@ -94,6 +100,7 @@ const listQuerySchema = z.object({
     .optional()
     .transform(v => (v && v.length > 0 ? v : undefined)),
   sort: z.enum(['recent', 'name', 'favorites']).default('recent'),
+  view: z.enum(['all', 'mine', 'public']).default('all'),
 })
 
 /**
@@ -123,6 +130,7 @@ export async function GET(req: NextRequest) {
     const parsedQ = listQuerySchema.safeParse({
       q: searchParams.get('q') ?? undefined,
       sort: searchParams.get('sort') ?? undefined,
+      view: searchParams.get('view') ?? undefined,
     })
     if (!parsedQ.success) {
       return NextResponse.json(
@@ -130,16 +138,29 @@ export async function GET(req: NextRequest) {
         { status: 400 }
       )
     }
-    const { q, sort } = parsedQ.data
+    const { q, sort, view } = parsedQ.data
 
     // Validated lookup: a stale JWT (deleted account) degrades to guest
     // visibility instead of an empty private set.
     const userId = await getSessionUserIdOrNull()
-    const where = {
-      ...(userId ? { userId } : { userId: null }),
-      // SQLite `contains` is a substring match (case-insensitive for ASCII).
-      ...(q ? { name: { contains: q } } : {}),
+
+    // Phase 6 M2: guests own nothing — `mine` is a well-defined empty set
+    // rather than an error, so the UI can render the empty state uniformly.
+    if (view === 'mine' && !userId) {
+      return NextResponse.json({ presets: [], total: 0, limit: PRESET_LIST_LIMIT })
     }
+
+    const nameFilter = q ? { name: { contains: q } } : {}
+    const visibilityFilter =
+      view === 'public'
+        ? { userId: null }
+        : view === 'mine'
+          ? { userId }
+          : userId
+            ? // own ∪ public — OR is ANDed with nameFilter on the same level
+              { OR: [{ userId }, { userId: null }] }
+            : { userId: null }
+    const where = { ...visibilityFilter, ...nameFilter }
     const orderBy: Prisma.GlassPresetOrderByWithRelationInput[] =
       sort === 'name'
         ? [{ name: 'asc' }]
@@ -167,6 +188,9 @@ export async function GET(req: NextRequest) {
         config: parsed.value,
         cover: r.cover,
         favorite: r.favorite,
+        // Phase 6 M2: ownership badge data — signed-in callers learn which
+        // rows are theirs; guests always see public rows (mine=false).
+        mine: userId !== null && r.userId === userId,
         createdAt: r.createdAt.toISOString(),
       })
     }
@@ -225,6 +249,7 @@ export async function POST(req: NextRequest) {
         config: parsed.data.config,
         cover: row.cover,
         favorite: row.favorite,
+        mine: userId !== null,
         createdAt: row.createdAt.toISOString(),
       },
       { status: 201 }

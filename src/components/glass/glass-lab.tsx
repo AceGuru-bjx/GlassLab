@@ -106,11 +106,16 @@ interface SavedPreset {
   config: GlassConfig
   cover?: string | null
   favorite: boolean
+  /** Phase 6 M2: ownership badge — true when the row belongs to the session user. */
+  mine: boolean
   createdAt: string
 }
 
 /** Phase 4 M1: server-side sort orders understood by GET /api/presets. */
 type PresetSort = 'recent' | 'name' | 'favorites'
+
+/** Phase 6 M2: visibility slice understood by GET /api/presets. */
+type PresetView = 'all' | 'mine' | 'public'
 
 const BACKGROUNDS: BackgroundOption[] = [
   {
@@ -603,6 +608,8 @@ export function GlassLab() {
   const [presetQuery, setPresetQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [sortMode, setSortMode] = useState<PresetSort>('recent')
+  // Phase 6 M2: visibility slice (only rendered for signed-in users)
+  const [viewMode, setViewMode] = useState<PresetView>('all')
   const [totalSaved, setTotalSaved] = useState(0)
   const [togglingFavId, setTogglingFavId] = useState<string | null>(null)
   const [authOpen, setAuthOpen] = useState(false)
@@ -785,6 +792,7 @@ export function GlassLab() {
       const params = new URLSearchParams()
       if (debouncedQuery) params.set('q', debouncedQuery)
       if (sortMode !== 'recent') params.set('sort', sortMode)
+      if (viewMode !== 'all') params.set('view', viewMode)
       const qs = params.toString()
       const res = await fetch(`/api/presets${qs ? `?${qs}` : ''}`)
       if (!res.ok) throw new Error('加载失败')
@@ -802,7 +810,7 @@ export function GlassLab() {
     } finally {
       if (seq === savedFetchSeq.current) setLoadingSaved(false)
     }
-  }, [debouncedQuery, sortMode])
+  }, [debouncedQuery, sortMode, viewMode])
 
   // Phase 4 M1: debounce the search box so typing doesn't hammer the API.
   useEffect(() => {
@@ -1712,6 +1720,37 @@ export function GlassLab() {
                       </SelectContent>
                     </Select>
                   </div>
+                  {/* Phase 6 M2: visibility slice chips (signed-in only) */}
+                  {session?.user && (
+                    <div
+                      className="mb-2 flex gap-1.5"
+                      role="group"
+                      aria-label="预设视图筛选"
+                      data-testid="view-chips"
+                    >
+                      {(
+                        [
+                          { id: 'all', label: '全部' },
+                          { id: 'mine', label: '我的' },
+                          { id: 'public', label: '公共' },
+                        ] as const
+                      ).map(v => (
+                        <button
+                          key={v.id}
+                          aria-pressed={viewMode === v.id}
+                          onClick={() => setViewMode(v.id)}
+                          data-testid={`view-${v.id}`}
+                          className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors ${
+                            viewMode === v.id
+                              ? 'border-teal-500 bg-teal-500/10 text-teal-600'
+                              : 'text-muted-foreground hover:border-teal-500/40 hover:text-foreground'
+                          }`}
+                        >
+                          {v.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <div className="max-h-96 space-y-2 overflow-y-auto pr-1 glass-scroll">
                     {loadingSaved ? (
                       <div className="flex items-center justify-center py-10 text-xs text-muted-foreground">
@@ -1765,7 +1804,21 @@ export function GlassLab() {
                             )}
                             <span className="min-w-0">
                               <span className="block truncate text-xs font-medium">{p.name}</span>
-                              <span className="block text-[10px] text-muted-foreground">
+                              <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                                {/* Phase 6 M2: ownership badge (signed-in only) */}
+                                {session?.user && (
+                                  <span
+                                    className={cn(
+                                      'shrink-0 rounded-full border px-1.5 py-px text-[9px] leading-none font-medium',
+                                      p.mine
+                                        ? 'border-teal-500/40 bg-teal-500/10 text-teal-600'
+                                        : 'border-border bg-muted/60 text-muted-foreground'
+                                    )}
+                                    data-testid="ownership-badge"
+                                  >
+                                    {p.mine ? '我的' : '公共'}
+                                  </span>
+                                )}
                                 折射 {p.config.refraction}px · 模糊 {p.config.blur}px
                               </span>
                             </span>
