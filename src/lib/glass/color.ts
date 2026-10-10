@@ -45,6 +45,38 @@ export function withAlpha(color: string, alpha: number): string {
 }
 
 /**
+ * Normalize any whitelisted CSS color to a simple #rrggbb hex string.
+ * Uses the same canvas reference parser as isDarkColor — unparseable or
+ * fully transparent colors resolve to #000000. Feeds <input type="color">
+ * swatches, which only accept 6-digit hex values.
+ */
+export function toHexColor(color: string | undefined | null): string {
+  if (typeof document === 'undefined' || typeof color !== 'string') return '#000000'
+  const canvas = document.createElement('canvas')
+  canvas.width = 1
+  canvas.height = 1
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return '#000000'
+  ctx.fillStyle = '#000000'
+  ctx.fillStyle = color.trim()
+  const v = ctx.fillStyle
+  if (v.startsWith('#')) {
+    const hex = v.slice(1)
+    if (hex.length === 8) return '#' + hex.slice(0, 6)
+    if (hex.length === 4) return '#' + hex.slice(0, 3).split('').map(x => x + x).join('')
+    if (hex.length === 3) return '#' + hex.split('').map(x => x + x).join('')
+    if (hex.length === 6) return v
+  }
+  const m = v.match(/rgba?\(([^)]+)\)/)
+  if (!m) return '#000000'
+  const parts = m[1].split(/[\s,/]+/).filter(Boolean).map(parseFloat)
+  if (parts.length < 3 || parts.slice(0, 3).some(x => Number.isNaN(x))) return '#000000'
+  const b = (n: number) =>
+    Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0')
+  return `#${b(parts[0])}${b(parts[1])}${b(parts[2])}`
+}
+
+/**
  * Perceived-luminance darkness test for any whitelisted CSS color.
  * Uses a detached canvas as the reference CSS color parser, so hex of any
  * length, rgb()/hsl() forms and "transparent" all resolve identically to

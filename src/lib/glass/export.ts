@@ -19,6 +19,10 @@ function radiusPx(cornerRadius: number): string {
 /** CSS body shared by the CSS and React exports. */
 function cssBody(config: GlassConfig): string {
   const hl = Math.max(0, Math.min(1, config.highlight))
+  const hlColor =
+    typeof config.highlightColor === 'string' && config.highlightColor.trim()
+      ? config.highlightColor
+      : '#ffffff'
   const frost = Math.max(0, Math.min(1, config.frost ?? 0))
   const vignette = Math.max(0, Math.min(1, config.vignette ?? 0))
   const glow =
@@ -59,11 +63,11 @@ function cssBody(config: GlassConfig): string {
   padding: 1.5px;
   pointer-events: none;
   background: linear-gradient(${config.lightAngle}deg,
-    rgba(255, 255, 255, ${(0.75 * hl).toFixed(2)}) 0%,
-    rgba(255, 255, 255, ${(0.18 * hl).toFixed(2)}) 28%,
-    rgba(255, 255, 255, ${(0.02 * hl).toFixed(2)}) 50%,
-    rgba(255, 255, 255, ${(0.1 * hl).toFixed(2)}) 72%,
-    rgba(255, 255, 255, ${(0.45 * hl).toFixed(2)}) 100%);
+    ${withAlpha(hlColor, 0.75 * hl)} 0%,
+    ${withAlpha(hlColor, 0.18 * hl)} 28%,
+    ${withAlpha(hlColor, 0.02 * hl)} 50%,
+    ${withAlpha(hlColor, 0.1 * hl)} 72%,
+    ${withAlpha(hlColor, 0.45 * hl)} 100%);
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
@@ -176,7 +180,11 @@ export function validateConfigObject(raw: unknown): GlassConfig | null {
   for (const k of boolKeys) {
     if (typeof merged[k] !== 'boolean') return null
   }
-  if (typeof merged.tint !== 'string' || typeof merged.glow !== 'string') {
+  if (
+    typeof merged.tint !== 'string' ||
+    typeof merged.glow !== 'string' ||
+    typeof merged.highlightColor !== 'string'
+  ) {
     return null
   }
   return merged

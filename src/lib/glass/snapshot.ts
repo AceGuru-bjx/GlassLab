@@ -12,6 +12,7 @@
  */
 
 import type { GlassConfig } from './presets'
+import { withAlpha } from './color'
 
 export interface SnapshotBackgroundSpec {
   /** image source (built-in wallpaper path or uploaded background raw URL) */
@@ -197,6 +198,10 @@ export async function generateGlassSnapshot(
 
     // fresnel rim highlight along lightAngle
     const hl = Math.max(0, Math.min(1, config.highlight))
+      const hlColor =
+        typeof config.highlightColor === 'string' && config.highlightColor.trim()
+          ? config.highlightColor
+          : '#ffffff'
     if (hl > 0.02) {
       const rad2 = (config.lightAngle * Math.PI) / 180
       const dirx = Math.sin(rad2)
@@ -210,9 +215,10 @@ export async function generateGlassSnapshot(
         cx + (dirx * L) / 2,
         cy + (diry * L) / 2
       )
-      g.addColorStop(0, `rgba(255,255,255,${(hl * 0.95).toFixed(2)})`)
-      g.addColorStop(0.5, `rgba(255,255,255,${(hl * 0.12).toFixed(2)})`)
-      g.addColorStop(1, `rgba(255,255,255,${(hl * 0.4).toFixed(2)})`)
+      // Phase 8: fresnel stops follow the user-chosen highlight color.
+      g.addColorStop(0, withAlpha(hlColor, hl * 0.95))
+      g.addColorStop(0.5, withAlpha(hlColor, hl * 0.12))
+      g.addColorStop(1, withAlpha(hlColor, hl * 0.4))
       ctx.strokeStyle = g
       ctx.lineWidth = 10
       roundRectPath(ctx, x + 4, y + 4, w - 8, h - 8, Math.max(4, r - 4))

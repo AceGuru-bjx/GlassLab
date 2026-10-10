@@ -42,6 +42,8 @@ const glassConfigSchema = z.object({
   // Phase 2 field — default keeps pre-lightAngle payloads (older clients and
   // stored rows) valid instead of 400/corrupt.
   lightAngle: z.number().min(0).max(360).default(45),
+  // Phase 8: colored fresnel rim — default keeps pre-Phase-8 payloads valid.
+  highlightColor: colorField(32).default('#ffffff'),
   tint: colorField(32),
   tintOpacity: z.number().min(0).max(1),
   overLight: z.boolean(),

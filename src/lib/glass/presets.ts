@@ -27,6 +27,8 @@ export interface GlassConfig {
   highlight: number
   /** Fresnel rim highlight direction, degrees (0 = to top, clockwise) */
   lightAngle: number
+  /** Phase 8: fresnel rim highlight color (#hex / rgb() / hsl()) */
+  highlightColor: string
   /** Tint color applied over the glass */
   tint: string
   /** Tint opacity, 0..1 */
@@ -70,6 +72,7 @@ export const DEFAULT_CONFIG: GlassConfig = {
   depthEffect: false,
   highlight: 0.85,
   lightAngle: 45,
+  highlightColor: '#ffffff',
   tint: '#ffffff',
   tintOpacity: 0.08,
   overLight: false,
@@ -189,6 +192,28 @@ export const PRESETS: GlassPreset[] = [
       highlight: 0.9,
       vignette: 0.3,
       lightAngle: 160,
+    },
+  },
+  {
+    id: 'gold-rim',
+    name: '鎏金辉光',
+    desc: '金色高光，暖调奢华',
+    swatch: 'linear-gradient(135deg,#fde68a,#f59e0b,#78350f)',
+    category: '经典',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 26,
+      height: 42,
+      dispersion: 0.35,
+      blur: 4,
+      saturation: 135,
+      cornerRadius: 24,
+      tint: '#78350f',
+      tintOpacity: 0.2,
+      highlight: 1,
+      highlightColor: '#fbbf24',
+      lightAngle: 315,
+      glow: 'rgba(251,191,36,0.3)',
     },
   },
 
@@ -391,6 +416,29 @@ export const PRESETS: GlassPreset[] = [
       lightAngle: 200,
     },
   },
+  {
+    id: 'aurora-edge',
+    name: '极光边缘',
+    desc: '青碧高光，冷冽通透',
+    swatch: 'linear-gradient(135deg,#ccfbf1,#5eead4,#0f766e)',
+    category: '材质',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 24,
+      height: 40,
+      dispersion: 0.3,
+      blur: 9,
+      saturation: 150,
+      cornerRadius: 28,
+      tint: '#134e4a',
+      tintOpacity: 0.18,
+      highlight: 1,
+      highlightColor: '#5eead4',
+      frost: 0.2,
+      edgeBlur: 0.3,
+      lightAngle: 45,
+    },
+  },
 
   // ------------------------------ 光影 ------------------------------
   {
@@ -561,6 +609,27 @@ export const PRESETS: GlassPreset[] = [
       highlight: 0.9,
       glow: 'rgba(191,219,254,0.32)',
       lightAngle: 135,
+    },
+  },
+  {
+    id: 'rose-dawn',
+    name: '玫瑰晨光',
+    desc: '粉金高光，破晓柔光',
+    swatch: 'linear-gradient(135deg,#ffe4e6,#fda4af,#e11d48)',
+    category: '光影',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 28,
+      height: 44,
+      dispersion: 0.45,
+      blur: 4,
+      saturation: 135,
+      cornerRadius: 26,
+      tint: '#fdf2f8',
+      tintOpacity: 0.12,
+      highlight: 1,
+      highlightColor: '#fda4af',
+      lightAngle: 45,
     },
   },
 
@@ -744,6 +813,28 @@ export const PRESETS: GlassPreset[] = [
       highlight: 0.95,
       glow: 'rgba(110,231,183,0.3)',
       lightAngle: 250,
+    },
+  },
+  {
+    id: 'cyan-flame',
+    name: '青焰边缘',
+    desc: '电光青边，高色散锐利',
+    swatch: 'linear-gradient(135deg,#cffafe,#22d3ee,#0e7490)',
+    category: '创意',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 44,
+      height: 60,
+      dispersion: 0.7,
+      blur: 1,
+      saturation: 170,
+      cornerRadius: 22,
+      tint: '#0e7490',
+      tintOpacity: 0.16,
+      highlight: 1,
+      highlightColor: '#22d3ee',
+      glow: 'rgba(34,211,238,0.32)',
+      lightAngle: 225,
     },
   },
 ]

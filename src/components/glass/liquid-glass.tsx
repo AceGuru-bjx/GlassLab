@@ -228,7 +228,13 @@ function LiquidGlassImpl({
   // Fresnel rim highlight — Kyant0 HighlightStyle.Default (plus-blend).
   // Phase 2: direction is user-controlled via `lightAngle`; overLight rotates
   // 90° to keep the rim readable against bright backdrops.
+  // Phase 8: the rim color is user-controlled via `highlightColor` (mirrors
+  // the colored DefaultHighlight shader shipped to the Android twin, PR #364).
   const highlight = Math.max(0, Math.min(1, config.highlight))
+  const highlightColor =
+    typeof config.highlightColor === 'string' && config.highlightColor.trim()
+      ? config.highlightColor
+      : '#ffffff'
   const ringPad = 1.5
 
   const overLight = config.overLight
@@ -498,11 +504,11 @@ function LiquidGlassImpl({
             ...radiusStyle(),
             padding: ringPad,
             background: `linear-gradient(${rimAngle}deg,
-              rgba(255,255,255,${0.75 * highlight}) 0%,
-              rgba(255,255,255,${0.18 * highlight}) 28%,
-              rgba(255,255,255,${0.02 * highlight}) 50%,
-              rgba(255,255,255,${0.10 * highlight}) 72%,
-              rgba(255,255,255,${0.45 * highlight}) 100%)`,
+              ${withAlpha(highlightColor, 0.75 * highlight)} 0%,
+              ${withAlpha(highlightColor, 0.18 * highlight)} 28%,
+              ${withAlpha(highlightColor, 0.02 * highlight)} 50%,
+              ${withAlpha(highlightColor, 0.1 * highlight)} 72%,
+              ${withAlpha(highlightColor, 0.45 * highlight)} 100%)`,
             WebkitMask:
               'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
             WebkitMaskComposite: 'xor',

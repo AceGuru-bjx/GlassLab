@@ -76,7 +76,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { GlassDemoCard, GlassPill } from '@/components/glass/glass-demo-card'
-import { isDarkColor } from '@/lib/glass/color'
+import { isDarkColor, toHexColor, withAlpha } from '@/lib/glass/color'
 import {
   CATEGORIES,
   DEFAULT_CONFIG,
@@ -180,6 +180,7 @@ type NumericKey = keyof Pick<
   | 'cornerRadius'
   | 'highlight'
   | 'lightAngle'
+  | 'tintOpacity'
   | 'elasticity'
   | 'frost'
   | 'edgeBlur'
@@ -202,6 +203,7 @@ const PARAM_ROWS: {
   { key: 'cornerRadius', label: '圆角半径', min: 0, max: 64, step: 1, fmt: v => `${v}px` },
   { key: 'highlight', label: '菲涅尔高光', min: 0, max: 1, step: 0.01, fmt: v => `${Math.round(v * 100)}%` },
   { key: 'lightAngle', label: '光源角度', min: 0, max: 360, step: 5, fmt: v => `${v}°` },
+  { key: 'tintOpacity', label: '染色浓度', min: 0, max: 1, step: 0.01, fmt: v => `${Math.round(v * 100)}%` },
   { key: 'elasticity', label: '拖拽弹性', min: 0, max: 1, step: 0.05, fmt: v => `${Math.round(v * 100)}%` },
   // ---- Phase 5 layered effects ----
   { key: 'edgeBlur', label: '边缘高斯弥散', min: 0, max: 1, step: 0.05, fmt: v => `${Math.round(v * 100)}%` },
@@ -243,6 +245,7 @@ const RANDOM_RANGES: Record<NumericKey, [number, number]> = {
   cornerRadius: [8, 48],
   highlight: [0.1, 0.8],
   lightAngle: [0, 360],
+  tintOpacity: [0.05, 0.35],
   elasticity: [0.1, 0.9],
   frost: [0, 0.4],
   edgeBlur: [0, 0.5],
@@ -388,6 +391,81 @@ function ConfigPanel({
           aria-label="暗色内容"
           onCheckedChange={onDarkContentChange}
         />
+      </div>
+
+      <Separator />
+
+      {/* ---- Phase 8 M2: color & light studio ---- */}
+      <div className="space-y-2.5" data-testid="color-panel">
+        <div>
+          <Label className="text-xs">色彩与光效</Label>
+          <p className="text-[10px] text-muted-foreground">
+            染色 / 菲涅尔高光 / 辉光实时取色
+          </p>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {(
+            [
+              {
+                key: 'tint',
+                label: '染色',
+                testid: 'tint-color',
+                value: toHexColor(config.tint),
+                pick: (hex: string) => onChange({ tint: hex }),
+              },
+              {
+                key: 'highlightColor',
+                label: '高光',
+                testid: 'highlight-color',
+                value: toHexColor(config.highlightColor),
+                pick: (hex: string) => onChange({ highlightColor: hex }),
+              },
+              {
+                key: 'glow',
+                label: '辉光',
+                testid: 'glow-color',
+                value: toHexColor(config.glow),
+                pick: (hex: string) => onChange({ glow: withAlpha(hex, 0.32) }),
+              },
+            ] as const
+          ).map(f => (
+            <label
+              key={f.key}
+              className="group flex cursor-pointer flex-col items-center gap-1 rounded-lg border p-1.5 transition-colors hover:border-teal-500/50"
+              title={f.label}
+            >
+              <span className="sr-only">{f.label}色板</span>
+              <input
+                type="color"
+                value={f.value}
+                onPointerDown={onHistoryCheckpoint}
+                onChange={e => f.pick(e.target.value)}
+                aria-label={`${f.label}色`}
+                data-testid={f.testid}
+                className="h-9 w-full cursor-pointer rounded-md border-none bg-transparent p-0"
+              />
+              <span className="text-[10px] leading-none text-muted-foreground group-hover:text-foreground">
+                {f.label}
+              </span>
+            </label>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            onHistoryCheckpoint?.()
+            onChange({ glow: 'transparent' })
+          }}
+          aria-pressed={config.glow === 'transparent'}
+          data-testid="glow-clear"
+          className={`w-full rounded-full border px-2 py-1 text-[11px] font-medium transition-colors ${
+            config.glow === 'transparent'
+              ? 'border-teal-500 bg-teal-500/10 text-teal-600'
+              : 'text-muted-foreground hover:border-teal-500/40 hover:text-foreground'
+          }`}
+        >
+          {config.glow === 'transparent' ? '辉光已关闭' : '关闭辉光'}
+        </button>
       </div>
     </div>
   )
@@ -1263,7 +1341,7 @@ export function GlassLab() {
           </div>
           <div className="flex items-center gap-2">
             <span className="hidden rounded-full border border-teal-500/30 bg-teal-500/10 px-2.5 py-1 text-[10px] font-medium text-teal-600 sm:inline-block">
-              Phase 7 · kyant0 七采样色散对齐
+              Phase 8 · 彩色光效系统
             </span>
             {sessionStatus === 'loading' ? (
               <div className="h-8 w-20 animate-pulse rounded-lg bg-muted" aria-hidden />
@@ -2036,7 +2114,7 @@ export function GlassLab() {
             </a>{' '}
             (Apache-2.0)
           </span>
-          <span>第七阶段 · 7-tap 四极光谱色散对齐 / 样式库 34 款 / vendored backdrop 同步</span>
+          <span>第八阶段 · 彩色菲涅尔高光 / 色彩控制台 / 样式库 38 款</span>
         </div>
       </footer>
     </div>
