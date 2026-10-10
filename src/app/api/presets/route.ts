@@ -94,6 +94,16 @@ const glassConfigSchema = z.object({
   // Phase 13 M2: global motion tempo — default 1 divides every animation
   // period by exactly 1 (no change), keeping stored rows identical.
   motionSpeed: z.number().min(0.25).max(2).default(1),
+  // Phase 14 M1: thin-film iridescence — defaults keep pre-Phase-14 payloads
+  // (older clients and stored rows) rendering identically (off).
+  iridescence: z.number().min(0).max(1).default(0),
+  iridescenceWidth: z.number().min(2).max(12).default(5),
+  // Phase 14 M2: sparkle glints — same default-0 compatibility contract.
+  sparkle: z.number().min(0).max(1).default(0),
+  sparkleSize: z.number().min(0.5).max(2).default(1),
+  sparkleTwinkle: z.number().min(0).max(1).default(0.45),
+  // Phase 14 M3: jelly wobble — default 0 (off).
+  wobble: z.number().min(0).max(1).default(0),
 })
 
 const createPresetSchema = z.object({

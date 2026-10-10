@@ -165,6 +165,89 @@ export function bubbleDriftAmpPx(bubbleDrift: number): number {
 }
 
 // ---------------------------------------------------------------------------
+// Phase 14 M2: sparkle glints — 4-point star field tiles.
+// Two seeds tile independently (the engine renders one layer per seed so
+// each twinkles on its own clock; the CSS export stacks both statically).
+// ---------------------------------------------------------------------------
+
+/** Draw one 4-point star (a glint) centered at (cx, cy). */
+function starPath(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  len: number
+): void {
+  const w = len * 0.18
+  ctx.beginPath()
+  ctx.moveTo(cx, cy - len)
+  ctx.quadraticCurveTo(cx + w, cy - w, cx + len, cy)
+  ctx.quadraticCurveTo(cx + w, cy + w, cx, cy + len)
+  ctx.quadraticCurveTo(cx - w, cy + w, cx - len, cy)
+  ctx.quadraticCurveTo(cx - w, cy - w, cx, cy - len)
+  ctx.closePath()
+}
+
+/** SVG path string of one 4-point star (mirrors starPath geometry). */
+function starSvgPath(cx: number, cy: number, len: number): string {
+  const r = (n: number) => Math.round(n * 10) / 10
+  const w = r(len * 0.18)
+  const x = r(cx)
+  const y = r(cy)
+  const l = r(len)
+  return `M${x} ${r(y - l)}Q${r(x + w)} ${r(y - w)} ${r(x + l)} ${y}Q${r(x + w)} ${r(y + w)} ${x} ${r(y + l)}Q${r(x - w)} ${r(y + w)} ${r(x - l)} ${y}Q${r(x - w)} ${r(y - w)} ${x} ${r(y - l)}Z`
+}
+
+/** Deterministic star layout for a seed — 9 glints in a 220×220 tile,
+ *  lengths 3..8px, kept inside the tile (seamless tiling). */
+function starLayout(seed: number, size: number): Array<[number, number, number]> {
+  const rnd = lcg(seed)
+  const out: Array<[number, number, number]> = []
+  let attempts = 0
+  while (out.length < 9 && attempts < 120) {
+    attempts++
+    const len = (3 + rnd() * 5) * clamp(size, 0.5, 2)
+    const cx = 12 + rnd() * 196
+    const cy = 12 + rnd() * 196
+    let ok = true
+    for (const [x, y, l] of out) {
+      if (Math.hypot(cx - x, cy - y) < len + l + 10) {
+        ok = false
+        break
+      }
+    }
+    if (ok) out.push([cx, cy, len])
+  }
+  return out
+}
+
+/**
+ * Sparkle glint tile (220×220, seamless) — white 4-point stars with a tiny
+ * bright core, per-star alpha baked in. Two public seeds (11 / 47) tile the
+ * glass with different constellations.
+ *
+ * @param alphaK overall visibility 0..1 (engine passes sparkle × 0.9)
+ * @param size star scale 0.5..2 (default 1)
+ * @param seed layout seed (11 or 47 — the two engine layers)
+ */
+export function sparkleDataUri(alphaK: number, size = 1, seed = 11): string {
+  const k = clamp(alphaK, 0, 1)
+  const rnd = lcg(seed * 7919)
+  const paths = starLayout(seed, size)
+    .map(([cx, cy, len]) => {
+      // Per-star alpha in 0.45..1 × overall k, deterministic.
+      const a = (k * (0.45 + rnd() * 0.55)).toFixed(3)
+      return `%3Cpath d='${starSvgPath(cx, cy, len)}' fill='rgba(255,255,255,${a})'/%3E`
+    })
+    .join('')
+  return `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E${paths}%3C/svg%3E`
+}
+
+/** Phase 14 M2: twinkle period (seconds) for a 0..1 speed param. */
+export function sparkleTwinklePeriodSec(sparkleTwinkle: number): string {
+  return (3.4 - 2.6 * clamp(sparkleTwinkle, 0, 1)).toFixed(1)
+}
+
+// ---------------------------------------------------------------------------
 // Canvas2D approximations for the cover/snapshot generators (the SVG
 // data-URIs would need an async image decode; canvas primitives are the
 // sync equivalent). Deterministic — no Math.random, so covers are stable.
@@ -184,6 +267,8 @@ export function drawTextureApproximations(
     bubbles?: number
     bubbleSize?: number
     bubbleDensity?: number
+    sparkle?: number
+    sparkleSize?: number
   }
 ): void {
   const brushed = clamp(config.brushed ?? 0, 0, 1)
@@ -191,6 +276,8 @@ export function drawTextureApproximations(
   const bubbles = clamp(config.bubbles ?? 0, 0, 1)
   const bubbleSize = clamp(config.bubbleSize ?? 1, 0.4, 2.2)
   const bubbleDensity = clamp(config.bubbleDensity ?? 1, 0.3, 2.5)
+  const sparkle = clamp(config.sparkle ?? 0, 0, 1)
+  const sparkleSize = clamp(config.sparkleSize ?? 1, 0.5, 2)
   const { x, y, w, h } = card
   if (brushed > 0.01) {
     const k = brushed * 0.4
@@ -209,6 +296,27 @@ export function drawTextureApproximations(
       ctx.moveTo(-diag, ly)
       ctx.lineTo(diag, ly + (rnd() - 0.5) * 2)
       ctx.stroke()
+    }
+    ctx.restore()
+  }
+  if (sparkle > 0.01) {
+    // Phase 14 M2: both seed constellations, scaled into the card like the
+    // bubble tile (220px reference). Static render of the twinkle layers.
+    const k = sparkle * 0.9
+    ctx.save()
+    const scale = Math.max(w, h) / 220
+    for (const seed of [11, 47]) {
+      const rnd = lcg(seed * 7919)
+      for (const [sx, sy, slen] of starLayout(seed, sparkleSize)) {
+        const a = k * (0.45 + rnd() * 0.55)
+        if (a < 0.02) continue
+        const cx = x + (sx / 220) * w
+        const cy = y + (sy / 220) * h
+        const len = slen * scale
+        ctx.fillStyle = `rgba(255,255,255,${a.toFixed(3)})`
+        starPath(ctx, cx, cy, len)
+        ctx.fill()
+      }
     }
     ctx.restore()
   }

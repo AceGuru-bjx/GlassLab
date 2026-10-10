@@ -88,6 +88,21 @@ export interface GlassConfig {
    *  divides every animation period: glow breathing, rim flow, bubble
    *  rise and drift). Default 1 keeps all existing renders identical. */
   motionSpeed: number
+  /** Phase 14 M1: thin-film iridescence — spectral conic sheen on the edge
+   *  band, anchored to the light angle (rotates with lightFollow). 0 = off. */
+  iridescence: number
+  /** Phase 14 M1: iridescent band width in px (2..12, default 5) */
+  iridescenceWidth: number
+  /** Phase 14 M2: sparkle glints — 4-point star field scattered over the
+   *  glass, two independently twinkling seeds. 0 = off. */
+  sparkle: number
+  /** Phase 14 M2: sparkle star scale (default 1) */
+  sparkleSize: number
+  /** Phase 14 M2: sparkle twinkle speed — 0 = static glitter, 1 = fastest */
+  sparkleTwinkle: number
+  /** Phase 14 M3: jelly wobble — border-radius blob morph breathing,
+   *  0 = off. Amplitude and tempo both scale with it (motionSpeed applies). */
+  wobble: number
 }
 
 export type GlassCategory = '经典' | '材质' | '光影' | '创意'
@@ -107,7 +122,12 @@ export function isMotionConfig(c: GlassConfig): boolean {
     (c.glowPulse ?? 0) > 0.01 ||
     (c.rimFlow ?? 0) > 0.01 ||
     (c.bubbleRise ?? 0) > 0.01 ||
-    (c.bubbleDrift ?? 0) > 0.01
+    (c.bubbleDrift ?? 0) > 0.01 ||
+    // Twinkle only renders while the sparkle layer itself is visible —
+    // sparkleTwinkle defaults to 0.45, so gating on sparkle keeps every
+    // sparkle-off preset (i.e. all pre-Phase-14 ones) correctly unbadged.
+    ((c.sparkle ?? 0) > 0.01 && (c.sparkleTwinkle ?? 0) > 0.01) ||
+    (c.wobble ?? 0) > 0.01
   )
 }
 
@@ -160,6 +180,12 @@ export const DEFAULT_CONFIG: GlassConfig = {
   edgeBlur: 0,
   vignette: 0,
   motionSpeed: 1,
+  iridescence: 0,
+  iridescenceWidth: 5,
+  sparkle: 0,
+  sparkleSize: 1,
+  sparkleTwinkle: 0.45,
+  wobble: 0,
 }
 
 export const PRESETS: GlassPreset[] = [
@@ -1010,6 +1036,56 @@ export const PRESETS: GlassPreset[] = [
     },
   },
   {
+    id: 'oil-slick',
+    name: '油膜幻彩',
+    desc: '汽油膜面，光谱干涉流转',
+    swatch: 'linear-gradient(120deg,#1e293b,#7c3aed 30%,#0ea5e9 55%,#334155 80%,#f59e0b)',
+    category: '材质',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 24,
+      height: 40,
+      dispersion: 0.4,
+      blur: 5,
+      saturation: 135,
+      cornerRadius: 24,
+      tint: '#312e81',
+      tintOpacity: 0.18,
+      highlight: 0.7,
+      brushed: 0.35,
+      iridescence: 0.7,
+      iridescenceWidth: 7,
+      lightAngle: 315,
+    },
+  },
+  {
+    id: 'pearl-shell',
+    name: '蚌壳珠光',
+    desc: '珠母贝光泽，粉紫青缓慢变彩',
+    swatch: 'conic-gradient(from 210deg,#fbcfe8,#e9d5ff,#a5f3fc 40%,#fef3c7 60%,#fbcfe8)',
+    category: '材质',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 20,
+      height: 34,
+      dispersion: 0.22,
+      blur: 6,
+      saturation: 128,
+      cornerRadius: 32,
+      tint: '#fdf2f8',
+      tintOpacity: 0.16,
+      highlight: 0.9,
+      highlightColor: '#fde68a',
+      frost: 0.15,
+      iridescence: 0.55,
+      iridescenceWidth: 5,
+      sparkle: 0.3,
+      sparkleSize: 0.7,
+      sparkleTwinkle: 0.3,
+      lightAngle: 150,
+    },
+  },
+  {
     id: 'champagne',
     name: '香槟气泡',
     desc: '金气泡升腾，庆祝微醺',
@@ -1413,6 +1489,144 @@ export const PRESETS: GlassPreset[] = [
       glow: 'rgba(252,211,77,0.2)',
       glowSpread: 22,
       vignette: 0.14,
+    },
+  },
+  {
+    id: 'aurora-glitter',
+    name: '极光闪粉',
+    desc: '青绿极光洒落细碎星芒',
+    swatch: 'linear-gradient(160deg,#065f46,#14b8a6 45%,#a7f3d0 70%,#0ea5e9)',
+    category: '光影',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 26,
+      height: 40,
+      dispersion: 0.35,
+      blur: 4,
+      saturation: 140,
+      cornerRadius: 28,
+      tint: '#047857',
+      tintOpacity: 0.2,
+      highlight: 0.88,
+      highlightColor: '#ccfbf1',
+      sparkle: 0.6,
+      sparkleSize: 0.85,
+      sparkleTwinkle: 0.55,
+      iridescence: 0.35,
+      iridescenceWidth: 4,
+      glow: 'rgba(45,212,191,0.28)',
+      glowSpread: 26,
+      glowPulse: 0.35,
+      shadowIntensity: 0.4,
+      shadowDistance: 18,
+      lightAngle: 120,
+    },
+  },
+  {
+    id: 'bubble-prism',
+    name: '泡泡虹彩',
+    desc: '透亮皂泡，七彩流转边缘',
+    swatch: 'radial-gradient(circle at 33% 30%,rgba(255,255,255,0.9),rgba(186,230,253,0.4) 35%,rgba(192,132,252,0.35) 70%,rgba(255,255,255,0.15))',
+    category: '创意',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 32,
+      height: 30,
+      dispersion: 0.5,
+      blur: 1,
+      saturation: 145,
+      cornerRadius: 48,
+      tint: '#ffffff',
+      tintOpacity: 0.04,
+      highlight: 0.95,
+      iridescence: 0.85,
+      iridescenceWidth: 6,
+      shadowIntensity: 0.25,
+      shadowDistance: 12,
+      shadowSoftness: 34,
+      lightAngle: 45,
+    },
+  },
+  {
+    id: 'starry-shards',
+    name: '星河碎片',
+    desc: '深空玻璃嵌入点点星光',
+    swatch: 'radial-gradient(circle at 70% 25%,#1e1b4b,#0f172a 55%,#312e81)',
+    category: '创意',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 24,
+      height: 38,
+      dispersion: 0.3,
+      blur: 5,
+      saturation: 118,
+      cornerRadius: 24,
+      tint: '#1e1b4b',
+      tintOpacity: 0.3,
+      highlight: 0.75,
+      sparkle: 0.75,
+      sparkleSize: 0.9,
+      sparkleTwinkle: 0.6,
+      vignette: 0.3,
+      glow: 'rgba(129,140,248,0.22)',
+      glowSpread: 24,
+      lightAngle: 300,
+    },
+  },
+  {
+    id: 'diamond-dust',
+    name: '钻石星尘',
+    desc: '高色散晶面，锋利四芒闪光',
+    swatch: 'conic-gradient(from 45deg,#e0f2fe,#bae6fd 25%,#f0f9ff 50%,#e0e7ff 75%,#e0f2fe)',
+    category: '创意',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 30,
+      height: 34,
+      dispersion: 0.7,
+      blur: 1,
+      saturation: 150,
+      cornerRadius: 20,
+      tint: '#f8fafc',
+      tintOpacity: 0.06,
+      highlight: 0.9,
+      sparkle: 0.85,
+      sparkleSize: 1.25,
+      sparkleTwinkle: 0.7,
+      iridescence: 0.4,
+      iridescenceWidth: 3,
+      shadowIntensity: 0.3,
+      shadowDistance: 14,
+      lightAngle: 60,
+    },
+  },
+  {
+    id: 'aqua-jelly',
+    name: '水润果冻',
+    desc: 'Q弹水珠，果冻般呼吸形变',
+    swatch: 'radial-gradient(circle at 35% 30%,rgba(224,255,255,0.95),rgba(77,208,225,0.55) 45%,rgba(38,166,199,0.65))',
+    category: '创意',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 26,
+      height: 36,
+      dispersion: 0.25,
+      blur: 3,
+      saturation: 150,
+      cornerRadius: 36,
+      tint: '#22d3ee',
+      tintOpacity: 0.22,
+      highlight: 0.9,
+      bubbles: 0.5,
+      bubbleRise: 0.2,
+      wobble: 0.45,
+      glow: 'rgba(103,232,249,0.3)',
+      glowSpread: 26,
+      glowPulse: 0.25,
+      shadowIntensity: 0.35,
+      shadowDistance: 16,
+      shadowSoftness: 36,
+      lightAngle: 45,
     },
   },
 ]

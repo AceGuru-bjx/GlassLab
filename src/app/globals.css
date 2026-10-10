@@ -257,6 +257,63 @@
   }
 }
 
+/* Phase 14 M2: sparkle twinkle — opacity oscillation of one glint layer.
+ * Two layers run the same keyframes on different periods/delays, so the
+ * constellations alternate and the field reads as scattered twinkling. */
+@keyframes glass-sparkle {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.12;
+  }
+}
+
+/* Phase 14 M3: jelly wobble — border-radius blob morph. Every keyframe uses
+ * the full 4+4 corner form so interpolation is smooth; the base radius and
+ * amplitude arrive through (inherited, unregistered) custom properties set
+ * on the host, so every glass layer morphs in lockstep. The displacement
+ * map stays baked at the base corner — at wobble amplitudes the rim blur
+ * hides the sub-pixel mismatch. */
+@keyframes glass-jelly {
+  0%,
+  100% {
+    border-radius: var(--glass-jelly-r) var(--glass-jelly-r) var(--glass-jelly-r)
+      var(--glass-jelly-r) / var(--glass-jelly-r) var(--glass-jelly-r)
+      var(--glass-jelly-r) var(--glass-jelly-r);
+  }
+  25% {
+    border-radius: calc(var(--glass-jelly-r) * (1 + 0.32 * var(--glass-jelly-amp)))
+      calc(var(--glass-jelly-r) * (1 - 0.22 * var(--glass-jelly-amp)))
+      calc(var(--glass-jelly-r) * (1 + 0.18 * var(--glass-jelly-amp)))
+      calc(var(--glass-jelly-r) * (1 - 0.14 * var(--glass-jelly-amp))) /
+      calc(var(--glass-jelly-r) * (1 + 0.32 * var(--glass-jelly-amp)))
+      calc(var(--glass-jelly-r) * (1 - 0.22 * var(--glass-jelly-amp)))
+      calc(var(--glass-jelly-r) * (1 + 0.18 * var(--glass-jelly-amp)))
+      calc(var(--glass-jelly-r) * (1 - 0.14 * var(--glass-jelly-amp)));
+  }
+  50% {
+    border-radius: calc(var(--glass-jelly-r) * (1 - 0.18 * var(--glass-jelly-amp)))
+      calc(var(--glass-jelly-r) * (1 + 0.28 * var(--glass-jelly-amp)))
+      calc(var(--glass-jelly-r) * (1 - 0.1 * var(--glass-jelly-amp)))
+      calc(var(--glass-jelly-r) * (1 + 0.22 * var(--glass-jelly-amp))) /
+      calc(var(--glass-jelly-r) * (1 - 0.18 * var(--glass-jelly-amp)))
+      calc(var(--glass-jelly-r) * (1 + 0.28 * var(--glass-jelly-amp)))
+      calc(var(--glass-jelly-r) * (1 - 0.1 * var(--glass-jelly-amp)))
+      calc(var(--glass-jelly-r) * (1 + 0.22 * var(--glass-jelly-amp)));
+  }
+  75% {
+    border-radius: calc(var(--glass-jelly-r) * (1 + 0.12 * var(--glass-jelly-amp)))
+      calc(var(--glass-jelly-r) * (1 - 0.08 * var(--glass-jelly-amp)))
+      calc(var(--glass-jelly-r) * (1 + 0.3 * var(--glass-jelly-amp)))
+      calc(var(--glass-jelly-r) * (1 - 0.2 * var(--glass-jelly-amp))) /
+      calc(var(--glass-jelly-r) * (1 + 0.12 * var(--glass-jelly-amp)))
+      calc(var(--glass-jelly-r) * (1 - 0.08 * var(--glass-jelly-amp)))
+      calc(var(--glass-jelly-r) * (1 + 0.3 * var(--glass-jelly-amp)))
+      calc(var(--glass-jelly-r) * (1 - 0.2 * var(--glass-jelly-amp)));
+  }
+}
+
 /* Accessibility: motion is an enhancement, never a requirement (#88). */
 @media (prefers-reduced-motion: reduce) {
   [data-glass-animated] {

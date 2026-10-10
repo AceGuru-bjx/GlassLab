@@ -16,6 +16,8 @@ import {
   bubbleDriftPeriodSec,
   bubbleRisePeriodSec,
   bubblesDataUri,
+  sparkleDataUri,
+  sparkleTwinklePeriodSec,
 } from './textures'
 import { DEFAULT_CONFIG, type GlassConfig } from './presets'
 
@@ -102,6 +104,17 @@ function cssBody(config: GlassConfig): string {
     bgImages.push(`url("${bubblesDataUri(bubbles * 0.55, bubbleSize, bubbleDensity)}")`)
     bgSizes.push('200px 200px')
   }
+  // Phase 14 M2: sparkle glints — both seed constellations stack statically
+  // (the live twinkle is engine-only: per-layer opacity cannot animate on a
+  // shared background stack without dimming the content).
+  const sparkle = Math.max(0, Math.min(1, config.sparkle ?? 0))
+  const sparkleSize = Math.max(0.5, Math.min(2, config.sparkleSize ?? 1))
+  if (sparkle > 0.01) {
+    for (const seed of [11, 47]) {
+      bgImages.push(`url("${sparkleDataUri(sparkle * 0.9, sparkleSize, seed)}")`)
+      bgSizes.push('220px 220px')
+    }
+  }
   const frostBg =
     bgImages.length > 0
       ? `\n  /* 叠层纹理（SVG data-URI，零 JS） */\n  background-image: ${bgImages.join(', ')};\n  background-size: ${bgSizes.join(', ')};`
@@ -139,6 +152,11 @@ function cssBody(config: GlassConfig): string {
   // per-layer keyframes below give rise the -y values and drift the -x.
   const riseAnimated = bubbleRise > 0.01 && bubbles > 0.01
   const driftAnimated = bubbleDrift > 0.01 && bubbles > 0.01
+  // Phase 14 M3: jelly wobble — the root's border-radius morphs through the
+  // keyframes below; ::before/::after inherit the animated radius for free.
+  const wobble = Math.max(0, Math.min(1, config.wobble ?? 0))
+  const wobbleAnimated = wobble > 0.01
+  const wobblePeriod = ((5.5 - 3.5 * wobble) / motionSpeed).toFixed(1)
   const rootAnimations: string[] = []
   if (glowPulse > 0.01 && hasGlow) {
     rootAnimations.push(
@@ -153,6 +171,9 @@ function cssBody(config: GlassConfig): string {
       `glass-bubble-drift ${driftPeriod}s ease-in-out infinite alternate`
     )
   }
+  if (wobbleAnimated) {
+    rootAnimations.push(`glass-jelly ${wobblePeriod}s ease-in-out infinite`)
+  }
   const glowAnimationRule =
     rootAnimations.length > 0 ? `\n  animation: ${rootAnimations.join(', ')};` : ''
   const glowPulseKeyframes =
@@ -164,6 +185,24 @@ function cssBody(config: GlassConfig): string {
       ? `\n  --glass-rim-start: ${rimAngleDeg}deg;\n  --glass-rim-angle: ${rimAngleDeg}deg;\n  animation: glass-rim-flow ${rimFlowPeriod}s linear infinite;`
       : ''
   const rimGradientAngle = rimFlow > 0.01 ? 'var(--glass-rim-angle)' : `${config.lightAngle}deg`
+  // ---- Phase 14 M1: iridescence joins ::before as a background layer ----
+  // The rim gradient stays the top layer (the sharper highlight), the
+  // spectral conic sheen fills the wider band beneath it. When off, the
+  // ::before block stays byte-identical to the pre-Phase-14 output.
+  const iridescence = Math.max(0, Math.min(1, config.iridescence ?? 0))
+  const iridescenceWidth = Math.max(2, Math.min(12, config.iridescenceWidth ?? 5))
+  const iriOn = iridescence > 0.01
+  const iriA = (rgb: string, f: number) => `rgba(${rgb}, ${(iridescence * f).toFixed(3)})`
+  const iriConic = `conic-gradient(from ${rimAngleDeg}deg,
+    ${iriA('255, 130, 130', 0.5)} 0deg,
+    ${iriA('255, 200, 100', 0.55)} 45deg,
+    ${iriA('255, 240, 140', 0.5)} 90deg,
+    ${iriA('150, 240, 150', 0.55)} 135deg,
+    ${iriA('120, 225, 255', 0.6)} 180deg,
+    ${iriA('150, 165, 255', 0.55)} 225deg,
+    ${iriA('220, 145, 255', 0.5)} 270deg,
+    ${iriA('255, 130, 200', 0.45)} 315deg,
+    ${iriA('255, 130, 130', 0.5)} 360deg)`
   const rimFlowKeyframes =
     rimFlow > 0.01
       ? `\n\n/* 高光流动（周期 ${rimFlowPeriod}s）— @property 注册 <angle> 平滑插值 */\n@property --glass-rim-angle {\n  syntax: "<angle>";\n  initial-value: 0deg;\n  inherits: false;\n}\n@keyframes glass-rim-flow {\n  from { --glass-rim-angle: var(--glass-rim-start); }\n  to { --glass-rim-angle: calc(var(--glass-rim-start) + 360deg); }\n}`
@@ -193,8 +232,14 @@ function cssBody(config: GlassConfig): string {
   const bubbleDriftKeyframes = driftAnimated
     ? `\n\n/* 气平漂移（周期 ${driftPeriod}s，振幅 ${driftAmp}px）— background-position-x 正弦往复 */\n@property --glass-drift-amp {\n  syntax: "<length>";\n  initial-value: 0px;\n  inherits: false;\n}\n@keyframes glass-bubble-drift {\n  from { background-position-x: calc(0px - var(--glass-drift-amp)); }\n  to { background-position-x: var(--glass-drift-amp); }\n}\n.liquid-glass { --glass-drift-amp: ${driftAmp}px; }`
     : ''
+  // Phase 14 M3: jelly keyframes — same block the live engine ships in
+  // globals.css. Vars resolve per-element (inherited), so the root morph and
+  // ::before/::after follow via border-radius: inherit.
+  const jellyKeyframes = wobbleAnimated
+    ? `\n\n/* 果冻形变（周期 ${wobblePeriod}s，振幅 ${Math.round(wobble * 100)}%）— border-radius blob 呼吸 */\n.liquid-glass { --glass-jelly-r: ${radiusPx(config.cornerRadius)}; --glass-jelly-amp: ${wobble.toFixed(3)}; }\n@keyframes glass-jelly {\n  0%, 100% { border-radius: var(--glass-jelly-r) var(--glass-jelly-r) var(--glass-jelly-r) var(--glass-jelly-r) / var(--glass-jelly-r) var(--glass-jelly-r) var(--glass-jelly-r) var(--glass-jelly-r); }\n  25% { border-radius: calc(var(--glass-jelly-r) * (1 + 0.32 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 - 0.22 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 + 0.18 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 - 0.14 * var(--glass-jelly-amp))) / calc(var(--glass-jelly-r) * (1 + 0.32 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 - 0.22 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 + 0.18 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 - 0.14 * var(--glass-jelly-amp))); }\n  50% { border-radius: calc(var(--glass-jelly-r) * (1 - 0.18 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 + 0.28 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 - 0.1 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 + 0.22 * var(--glass-jelly-amp))) / calc(var(--glass-jelly-r) * (1 - 0.18 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 + 0.28 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 - 0.1 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 + 0.22 * var(--glass-jelly-amp))); }\n  75% { border-radius: calc(var(--glass-jelly-r) * (1 + 0.12 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 - 0.08 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 + 0.3 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 - 0.2 * var(--glass-jelly-amp))) / calc(var(--glass-jelly-r) * (1 + 0.12 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 - 0.08 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 + 0.3 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 - 0.2 * var(--glass-jelly-amp))); }\n}`
+    : ''
   const motionGuard =
-    glowPulse > 0.01 || rimFlow > 0.01 || riseAnimated || driftAnimated
+    glowPulse > 0.01 || rimFlow > 0.01 || riseAnimated || driftAnimated || wobbleAnimated
       ? `\n\n@media (prefers-reduced-motion: reduce) {\n  .liquid-glass, .liquid-glass::before { animation: none !important; }\n}`
       : ''
 
@@ -210,25 +255,32 @@ function cssBody(config: GlassConfig): string {
     inset 0 -1px 0 rgba(0, 0, 0, 0.12), 0 8px 32px rgba(0, 0, 0, 0.12)${vignetteShadow}${castShadow}${glow};${glowAnimationRule}
 }
 
-/* 菲涅尔边缘高光 ${Math.round(hl * 100)}% @ ${config.lightAngle}° */
+/* 菲涅尔边缘高光 ${Math.round(hl * 100)}% @ ${config.lightAngle}°${
+    iriOn ? ` + 薄膜虹彩 ${Math.round(iridescence * 100)}%` : ''
+  } */
 .liquid-glass::before {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  padding: 1.5px;
+  padding: ${iriOn ? Math.max(1.5, iridescenceWidth) : 1.5}px;
   pointer-events: none;
-  background: linear-gradient(${rimGradientAngle},
+  background: ${iriOn ? `linear-gradient(${rimGradientAngle},
     ${withAlpha(hlColor, 0.75 * hl)} 0%,
     ${withAlpha(hlColor, 0.18 * hl)} 28%,
     ${withAlpha(hlColor, 0.02 * hl)} 50%,
     ${withAlpha(hlColor, 0.1 * hl)} 72%,
-    ${withAlpha(hlColor, 0.45 * hl)} 100%);${rimFlowRule}
+    ${withAlpha(hlColor, 0.45 * hl)} 100%), ${iriConic}` : `linear-gradient(${rimGradientAngle},
+    ${withAlpha(hlColor, 0.75 * hl)} 0%,
+    ${withAlpha(hlColor, 0.18 * hl)} 28%,
+    ${withAlpha(hlColor, 0.02 * hl)} 50%,
+    ${withAlpha(hlColor, 0.1 * hl)} 72%,
+    ${withAlpha(hlColor, 0.45 * hl)} 100%)`};${rimFlowRule}
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask-composite: exclude;
-}${edgeLayer}${glowPulseKeyframes}${rimFlowKeyframes}${bubbleRiseKeyframes}${bubbleDriftKeyframes}${motionGuard}`
+}${edgeLayer}${glowPulseKeyframes}${rimFlowKeyframes}${bubbleRiseKeyframes}${bubbleDriftKeyframes}${jellyKeyframes}${motionGuard}`
 }
 
 /** Standalone CSS export. */
@@ -348,6 +400,12 @@ export function validateConfigObject(raw: unknown): GlassConfig | null {
     'glowPulse',
     'rimFlow',
     'motionSpeed',
+    'iridescence',
+    'iridescenceWidth',
+    'sparkle',
+    'sparkleSize',
+    'sparkleTwinkle',
+    'wobble',
   ] as const
   for (const k of numKeys) {
     const v = Number(merged[k])

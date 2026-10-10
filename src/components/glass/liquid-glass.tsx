@@ -37,6 +37,8 @@ import {
   bubbleDriftPeriodSec,
   bubbleRisePeriodSec,
   bubblesDataUri,
+  sparkleDataUri,
+  sparkleTwinklePeriodSec,
 } from '@/lib/glass/textures'
 import type { GlassConfig } from '@/lib/glass/presets'
 
@@ -198,6 +200,12 @@ function LiquidGlassImpl({
     disabled,
   ])
 
+  // ---- Phase 13 M2: global motion tempo ----
+  // Every animation period divides by it (1 = authored speed). Clamped
+  // 0.25..2 to match the API/slider. Declared before the wobble block
+  // (radiusStyle needs it for the jelly period).
+  const motionSpeed = Math.max(0.25, Math.min(2, config.motionSpeed ?? 1))
+
   const radiusPx = useMemo(
     () =>
       config.cornerRadius >= 999
@@ -206,11 +214,24 @@ function LiquidGlassImpl({
     [config.cornerRadius, size.w, size.h]
   )
 
+  // ---- Phase 14 M3: jelly wobble ----
+  // Every layer reads the inherited custom properties off the host, so the
+  // whole stack (backdrop, tint, textures, rim, content clip) morphs in
+  // lockstep. Period divides by motionSpeed like every other animation.
+  const wobble = Math.max(0, Math.min(1, config.wobble ?? 0))
+  const wobbleAnimated = wobble > 0.01
+  const wobblePeriod = ((5.5 - 3.5 * wobble) / motionSpeed).toFixed(1)
+
   const radiusStyle = useCallback(
     (extra?: number): React.CSSProperties => ({
       borderRadius: config.cornerRadius >= 999 ? 9999 : `${Math.max(0, radiusPx - (extra ?? 0))}px`,
+      // Keyframe values override the inline border-radius while animating
+      // (animations beat normal declarations), so the morph applies cleanly.
+      ...(wobbleAnimated
+        ? { animation: `glass-jelly ${wobblePeriod}s ease-in-out infinite` }
+        : {}),
     }),
-    [config.cornerRadius, radiusPx]
+    [config.cornerRadius, radiusPx, wobbleAnimated, wobblePeriod]
   )
 
   // ---------- SVG filter chain ----------
@@ -269,9 +290,6 @@ function LiquidGlassImpl({
   // Phase 13 M1: horizontal drift (0 = off) — sway amplitude via the
   // registered --glass-drift-amp property consumed by the shared keyframes.
   const bubbleDrift = Math.max(0, Math.min(1, config.bubbleDrift ?? 0))
-  // Phase 13 M2: global motion tempo — every animation period divides by
-  // it (1 = authored speed). Clamped 0.25..2 to match the API/slider.
-  const motionSpeed = Math.max(0.25, Math.min(2, config.motionSpeed ?? 1))
   // ---- Phase 9 M1: glow system ----
   // Multiplier semantics: final alpha = glow's own embedded alpha × glowOpacity.
   // Default 1 keeps every pre-Phase-9 preset visually identical.
@@ -320,6 +338,19 @@ function LiquidGlassImpl({
   const bubbleDriftPeriod =
     Number(bubbleDriftPeriodSec(bubbleDrift, bubbleRise)) / motionSpeed
   const driftAmp = bubbleDriftAmpPx(bubbleDrift)
+  // Phase 14 M2: sparkle twinkle — two layers on coprime-ish periods with a
+  // half-phase delay on the second, so the constellations alternate.
+  const sparkle = Math.max(0, Math.min(1, config.sparkle ?? 0))
+  const sparkleSize = Math.max(0.5, Math.min(2, config.sparkleSize ?? 1))
+  const sparkleTwinkle = Math.max(0, Math.min(1, config.sparkleTwinkle ?? 0))
+  const sparkleAnimated = sparkle > 0.01 && sparkleTwinkle > 0.01
+  const twinklePeriodA =
+    Number(sparkleTwinklePeriodSec(sparkleTwinkle)) / motionSpeed
+  const twinklePeriodB = twinklePeriodA * 1.618
+  // Phase 14 M1: thin-film iridescence — a spectral conic sheen on the edge
+  // band, anchored to the light (rotates with lightFollow in real time).
+  const iridescence = Math.max(0, Math.min(1, config.iridescence ?? 0))
+  const iridescenceWidth = Math.max(2, Math.min(12, config.iridescenceWidth ?? 5))
   const glowAnimated = glowPulse > 0.01 && !!glowColor
   const rimAnimated = rimFlow > 0.01
   // Frosted grain: feTurbulence -> white grain w/ noise-derived alpha.
@@ -332,7 +363,17 @@ function LiquidGlassImpl({
     <div
       ref={hostRef}
       className={`relative ${className ?? ''}`}
-      style={style}
+      style={{
+        ...style,
+        // Phase 14 M3: jelly vars live on the host and inherit down to every
+        // layer — one declaration, whole-stack morph in lockstep.
+        ...(wobbleAnimated
+          ? ({
+              '--glass-jelly-r': `${radiusPx}px`,
+              '--glass-jelly-amp': wobble.toFixed(3),
+            } as React.CSSProperties)
+          : {}),
+      }}
     >
       {/* Filter defs — must stay mounted for backdrop-filter url() refs */}
       <svg
@@ -660,6 +701,64 @@ function LiquidGlassImpl({
                     .filter(Boolean)
                     .join(', ') || undefined
                 : undefined,
+          }}
+        />
+      )}
+
+      {/* Phase 14 M2: sparkle glints — two seed constellations twinkling
+          on independent clocks (a half-phase delay keeps them alternating).
+          Twinkle is engine-only: the CSS export bakes both layers statically
+          (per-layer opacity cannot animate on a shared background stack). */}
+      {sparkle > 0.01 &&
+        ([11, 47] as const).map((seed, i) => (
+          <div
+            key={seed}
+            aria-hidden
+            data-glass-animated={sparkleAnimated ? '' : undefined}
+            className="pointer-events-none absolute inset-0"
+            style={{
+              ...radiusStyle(),
+              backgroundImage: `url("${sparkleDataUri(sparkle * 0.9, sparkleSize, seed)}")`,
+              backgroundSize: '220px 220px',
+              ...(sparkleAnimated
+                ? {
+                    animation: `glass-sparkle ${(
+                      i === 0 ? twinklePeriodA : twinklePeriodB
+                    ).toFixed(1)}s ease-in-out infinite alternate`,
+                    animationDelay:
+                      i === 1 ? `-${(twinklePeriodB / 2).toFixed(1)}s` : undefined,
+                  }
+                : {}),
+            }}
+          />
+        ))}
+
+      {/* Phase 14 M1: thin-film iridescence — a spectral conic sheen masked
+          to the edge band, anchored to the light angle (rotates live with
+          lightFollow). A hair of blur softens the band edges. */}
+      {iridescence > 0.01 && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            ...radiusStyle(),
+            padding: iridescenceWidth,
+            filter: 'blur(0.5px)',
+            background: `conic-gradient(from ${lightAngleDeg}deg,
+              rgba(255, 130, 130, ${(0.5 * iridescence).toFixed(3)}) 0deg,
+              rgba(255, 200, 100, ${(0.55 * iridescence).toFixed(3)}) 45deg,
+              rgba(255, 240, 140, ${(0.5 * iridescence).toFixed(3)}) 90deg,
+              rgba(150, 240, 150, ${(0.55 * iridescence).toFixed(3)}) 135deg,
+              rgba(120, 225, 255, ${(0.6 * iridescence).toFixed(3)}) 180deg,
+              rgba(150, 165, 255, ${(0.55 * iridescence).toFixed(3)}) 225deg,
+              rgba(220, 145, 255, ${(0.5 * iridescence).toFixed(3)}) 270deg,
+              rgba(255, 130, 200, ${(0.45 * iridescence).toFixed(3)}) 315deg,
+              rgba(255, 130, 130, ${(0.5 * iridescence).toFixed(3)}) 360deg)`,
+            WebkitMask:
+              'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
+            WebkitMaskComposite: 'xor',
+            mask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
+            maskComposite: 'exclude',
           }}
         />
       )}

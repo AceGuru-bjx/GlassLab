@@ -208,6 +208,12 @@ type NumericKey = keyof Pick<
   | 'glowPulse'
   | 'rimFlow'
   | 'motionSpeed'
+  | 'iridescence'
+  | 'iridescenceWidth'
+  | 'sparkle'
+  | 'sparkleSize'
+  | 'sparkleTwinkle'
+  | 'wobble'
 >
 
 const PARAM_ROWS: {
@@ -258,6 +264,16 @@ const PARAM_ROWS: {
   { key: 'rimFlow', label: '高光流动', min: 0, max: 1, step: 0.01, fmt: v => (v <= 0.01 ? '关' : `${(6 - 4.5 * v).toFixed(1)}s`) },
   // ---- Phase 13 M2: global motion tempo (divides every animation period) ----
   { key: 'motionSpeed', label: '动效速度', min: 0.25, max: 2, step: 0.05, fmt: v => `${v.toFixed(2)}×` },
+  // ---- Phase 14 M1: thin-film iridescence (spectral edge sheen,
+  //      anchored to the light angle — rotate the light to swing it) ----
+  { key: 'iridescence', label: '薄膜虹彩', min: 0, max: 1, step: 0.01, fmt: v => (v <= 0.01 ? '关' : `${Math.round(v * 100)}%`) },
+  { key: 'iridescenceWidth', label: '虹彩宽度', min: 2, max: 12, step: 1, fmt: v => `${v}px` },
+  // ---- Phase 14 M2: sparkle glints (two twinkling constellations) ----
+  { key: 'sparkle', label: '星芒粒子', min: 0, max: 1, step: 0.01, fmt: v => (v <= 0.01 ? '关' : `${Math.round(v * 100)}%`) },
+  { key: 'sparkleSize', label: '星芒大小', min: 0.5, max: 2, step: 0.05, fmt: v => `${v.toFixed(2)}×` },
+  { key: 'sparkleTwinkle', label: '星芒闪烁', min: 0, max: 1, step: 0.01, fmt: v => (v <= 0.01 ? '静态' : `${(3.4 - 2.6 * v).toFixed(1)}s`) },
+  // ---- Phase 14 M3: jelly wobble (border-radius blob breathing) ----
+  { key: 'wobble', label: '果冻形变', min: 0, max: 1, step: 0.01, fmt: v => (v <= 0.01 ? '关' : `${Math.round(v * 100)}%`) },
 ]
 
 /** Map a stage background option to the canvas cover generator spec. */
@@ -319,6 +335,14 @@ const RANDOM_RANGES: Record<NumericKey, [number, number]> = {
   lightSmoothing: [0, 0],
   bubbleDrift: [0, 0],
   motionSpeed: [1, 1],
+  // Phase 14: iridescence/sparkle intensities randomize tastefully; their
+  // motion (twinkle, wobble) is opt-in like every animation.
+  iridescence: [0, 0.6],
+  iridescenceWidth: [3, 8],
+  sparkle: [0, 0.55],
+  sparkleSize: [0.6, 1.4],
+  sparkleTwinkle: [0, 0],
+  wobble: [0, 0],
 }
 
 /** Phase 4 M3: variant jitter amplitude (±15% of the current value). */
@@ -1601,7 +1625,7 @@ export function GlassLab() {
           </div>
           <div className="flex items-center gap-2">
             <span className="hidden rounded-full border border-teal-500/30 bg-teal-500/10 px-2.5 py-1 text-[10px] font-medium text-teal-600 sm:inline-block">
-              Phase 13 · 动效编排系统
+              Phase 14 · 虹彩与星芒
             </span>
             {sessionStatus === 'loading' ? (
               <div className="h-8 w-20 animate-pulse rounded-lg bg-muted" aria-hidden />
@@ -2497,7 +2521,7 @@ export function GlassLab() {
             </a>{' '}
             (Apache-2.0)
           </span>
-          <span>第十三阶段 · 动效编排系统 / 气泡漂移 · 动效速度 · 快捷键 · 样式库 {PRESETS.length} 款</span>
+          <span>第十四阶段 · 虹彩与星芒 / 薄膜虹彩 · 星芒粒子 · 果冻形变 · 样式库 {PRESETS.length} 款</span>
         </div>
       </footer>
     </div>

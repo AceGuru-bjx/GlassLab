@@ -259,6 +259,29 @@ export async function generateGlassSnapshot(
       ctx.stroke()
     }
 
+    // Phase 14 M1: iridescence approximation (4× stage scale — same conic
+    // stop ladder as the cover generator, feature-detected like there).
+    const iri = Math.max(0, Math.min(1, config.iridescence ?? 0))
+    if (iri > 0.01 && typeof ctx.createConicGradient === 'function') {
+      const iriW = Math.max(2, Math.min(12, config.iridescenceWidth ?? 5))
+      const start = ((config.lightAngle - 90) * Math.PI) / 180
+      const cg = ctx.createConicGradient(start, x + w / 2, y + h / 2)
+      const a = (f: number) => iri * f
+      cg.addColorStop(0, `rgba(255, 130, 130, ${a(0.5).toFixed(3)})`)
+      cg.addColorStop(0.125, `rgba(255, 200, 100, ${a(0.55).toFixed(3)})`)
+      cg.addColorStop(0.25, `rgba(255, 240, 140, ${a(0.5).toFixed(3)})`)
+      cg.addColorStop(0.375, `rgba(150, 240, 150, ${a(0.55).toFixed(3)})`)
+      cg.addColorStop(0.5, `rgba(120, 225, 255, ${a(0.6).toFixed(3)})`)
+      cg.addColorStop(0.625, `rgba(150, 165, 255, ${a(0.55).toFixed(3)})`)
+      cg.addColorStop(0.75, `rgba(220, 145, 255, ${a(0.5).toFixed(3)})`)
+      cg.addColorStop(0.875, `rgba(255, 130, 200, ${a(0.45).toFixed(3)})`)
+      cg.addColorStop(1, `rgba(255, 130, 130, ${a(0.5).toFixed(3)})`)
+      ctx.strokeStyle = cg
+      ctx.lineWidth = iriW * 3
+      roundRectPath(ctx, x + 4, y + 4, w - 8, h - 8, Math.max(4, r - 4))
+      ctx.stroke()
+    }
+
     paintWatermark(ctx)
 
     return await new Promise<Blob | null>(resolve =>
