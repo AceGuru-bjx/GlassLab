@@ -115,6 +115,17 @@ export interface GlassConfig {
    *  landing on a table (0 = off, keeps the default critically-damped
    *  settle; interaction-state param, not exported — lightFollow ruling). */
   dragBounce: number
+  /** Phase 16 M1: direction-aware drag squash & stretch — the card stretches
+   *  along the drag-velocity vector and squashes perpendicular (volume-ish
+   *  preserved, 0.6 compensation), smooth via springs, snapping back on
+   *  release. 0 = off (identity transform, rendering unchanged; interaction
+   *  param, not exported — dragBounce ruling). */
+  dragSquash: number
+  /** Phase 16 M3: glare sweep — a diagonal specular band periodically
+   *  crossing the surface (credit-card glint). 0 = off; intensity scales the
+   *  band alpha and shortens the period (motionSpeed applies). Exported via
+   *  a registered <percentage> var channel (--glass-glare-x). */
+  glare: number
 }
 
 export type GlassCategory = '经典' | '材质' | '光影' | '创意'
@@ -143,7 +154,9 @@ export function isMotionConfig(c: GlassConfig): boolean {
     // Phase 15 M1: the iridescent sweep is visible motion — gated on the
     // sheen itself so iriFlow-carrying-but-iridescence-off configs stay
     // unbadged (same interlock pattern as sparkleTwinkle).
-    ((c.iridescence ?? 0) > 0.01 && (c.iriFlow ?? 0) > 0.01)
+    ((c.iridescence ?? 0) > 0.01 && (c.iriFlow ?? 0) > 0.01) ||
+    // Phase 16 M3: the glare sweep is visible motion on the surface.
+    (c.glare ?? 0) > 0.01
   )
 }
 
@@ -205,6 +218,8 @@ export const DEFAULT_CONFIG: GlassConfig = {
   sparkleTwinkle: 0.45,
   wobble: 0,
   dragBounce: 0,
+  dragSquash: 0,
+  glare: 0,
 }
 
 export const PRESETS: GlassPreset[] = [
@@ -1748,6 +1763,89 @@ export const PRESETS: GlassPreset[] = [
       shadowIntensity: 0.3,
       shadowDistance: 14,
       shadowSoftness: 32,
+    },
+  },
+  {
+    id: 'taffy-pull',
+    name: '太妃拉糖',
+    desc: '拖动随速度拉长，太妃糖黏性形变',
+    swatch: 'linear-gradient(115deg,rgba(253,230,138,0.95),rgba(251,191,36,0.75) 55%,rgba(180,83,9,0.8))',
+    category: '创意',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 26,
+      height: 38,
+      dispersion: 0.3,
+      blur: 3,
+      saturation: 150,
+      cornerRadius: 30,
+      tint: '#f59e0b',
+      tintOpacity: 0.22,
+      highlight: 0.8,
+      elasticity: 0.8,
+      dragSquash: 0.8,
+      dragBounce: 0.55,
+      wobble: 0.22,
+      glow: 'rgba(253,224,71,0.28)',
+      glowSpread: 22,
+      shadowIntensity: 0.28,
+      shadowDistance: 16,
+      shadowSoftness: 30,
+    },
+  },
+  {
+    id: 'lux-vitrine',
+    name: '奢侈品橱窗',
+    desc: '镜面高光掠过，展柜玻璃的呼吸',
+    swatch: 'linear-gradient(120deg,rgba(226,232,240,0.9),rgba(203,213,225,0.5) 45%,rgba(148,163,184,0.7))',
+    category: '光影',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 18,
+      height: 26,
+      dispersion: 0.12,
+      blur: 4,
+      saturation: 112,
+      cornerRadius: 22,
+      tint: '#e2e8f0',
+      tintOpacity: 0.1,
+      highlight: 0.9,
+      lightAngle: 65,
+      glare: 0.4,
+      edgeBlur: 0.25,
+      glow: 'rgba(255,255,255,0.22)',
+      glowSpread: 18,
+      shadowIntensity: 0.35,
+      shadowDistance: 18,
+      shadowSoftness: 36,
+    },
+  },
+  {
+    id: 'aurora-graze',
+    name: '极光掠影',
+    desc: '青碧光带掠过，冰面下的极光',
+    swatch: 'linear-gradient(115deg,rgba(94,234,212,0.85),rgba(56,189,248,0.55) 50%,rgba(14,116,144,0.75))',
+    category: '创意',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 30,
+      height: 42,
+      dispersion: 0.42,
+      blur: 3,
+      saturation: 138,
+      cornerRadius: 28,
+      tint: '#2dd4bf',
+      tintOpacity: 0.16,
+      highlight: 0.78,
+      lightAngle: 30,
+      glare: 0.62,
+      iridescence: 0.35,
+      iridescenceWidth: 5,
+      glow: 'rgba(45,212,191,0.3)',
+      glowSpread: 26,
+      shadowIntensity: 0.3,
+      shadowDistance: 16,
+      shadowSoftness: 30,
     },
   },
 ]

@@ -287,6 +287,24 @@
   }
 }
 
+/* Phase 16 M3: glare sweep — a diagonal specular band crosses the surface
+ * (credit-card glint). The band rides a 250%-wide no-repeat gradient; both
+ * sweep endpoints sit off-screen (position 100% = left-out, 0% = right-out)
+ * so the loop restart is invisible. The keyframes dwell after the crossing
+ * (45% sweep / 55% rest) so the effect breathes instead of strobing.
+ * Exported CSS re-emits the same name (see lib/glass/export.ts). */
+@keyframes glass-glare-sweep {
+  0% {
+    background-position-x: 100%;
+  }
+  45% {
+    background-position-x: 0%;
+  }
+  100% {
+    background-position-x: 0%;
+  }
+}
+
 /* Phase 14 M3: jelly wobble — border-radius blob morph. Every keyframe uses
  * the full 4+4 corner form so interpolation is smooth; the base radius and
  * amplitude arrive through (inherited, unregistered) custom properties set

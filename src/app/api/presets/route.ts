@@ -112,6 +112,11 @@ const glassConfigSchema = z.object({
   wobble: z.number().min(0).max(1).default(0),
   // Phase 15 M3: drag-release bounce — interaction feel, default 0 (off).
   dragBounce: z.number().min(0).max(1).default(0),
+  // Phase 16 M1: direction-aware drag squash & stretch — interaction feel,
+  // default 0 (off) keeps every stored row and older payload identical.
+  dragSquash: z.number().min(0).max(1).default(0),
+  // Phase 16 M3: glare sweep — surface specular band, default 0 (off).
+  glare: z.number().min(0).max(1).default(0),
 })
 
 const createPresetSchema = z.object({

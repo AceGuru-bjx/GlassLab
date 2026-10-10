@@ -49,3 +49,4 @@ export default function RootLayout({
     </html>
   );
 }
+// Phase 16 M3: content-level touch — Turbopack CSS chunk rebuild (glare keyframes)

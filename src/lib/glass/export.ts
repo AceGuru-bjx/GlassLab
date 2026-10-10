@@ -127,9 +127,39 @@ function cssBody(config: GlassConfig): string {
       bgSizes.push('220px 220px')
     }
   }
+  // Phase 16 M3: glare sweep — the diagonal specular band joins the root's
+  // background stack as a 250%-wide no-repeat gradient. The sweep animates a
+  // registered <percentage> var consumed by the glare layer's entry in the
+  // static background-position-x list — a channel disjoint from the rise's
+  // -y longhand and the drift's per-layer -x lists (which emit var(--glass-
+  // glare-x) for this layer instead of 0px), so all three compose on the
+  // same root without clobbering (#108 pattern).
+  const glare = Math.max(0, Math.min(1, config.glare ?? 0))
+  const glareAnimated = glare > 0.01
+  let glareLayerIndex = -1
+  const glareBand = `linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, ${(
+    glare * 0.42
+  ).toFixed(3)}) 48%, rgba(255, 255, 255, ${(glare * 0.55).toFixed(3)}) 50%, rgba(255, 255, 255, ${(
+    glare * 0.42
+  ).toFixed(3)}) 52%, transparent 70%)`
+  if (glareAnimated) {
+    glareLayerIndex = bgImages.length
+    bgImages.push(glareBand)
+    bgSizes.push('250% 100%')
+  }
   const frostBg =
     bgImages.length > 0
-      ? `\n  /* 叠层纹理（SVG data-URI，零 JS） */\n  background-image: ${bgImages.join(', ')};\n  background-size: ${bgSizes.join(', ')};`
+      ? `\n  /* 叠层纹理（SVG data-URI，零 JS） */\n  background-image: ${bgImages.join(', ')};\n  background-size: ${bgSizes.join(', ')};${
+            glareAnimated
+              ? `\n  background-repeat: ${bgImages
+                  .map((_, i) => (i === glareLayerIndex ? 'no-repeat' : 'repeat'))
+                  .join(', ')};\n  background-position-x: ${bgImages
+                  .map((_, i) =>
+                    i === glareLayerIndex ? 'var(--glass-glare-x)' : '0px'
+                  )
+                  .join(', ')};`
+              : ''
+          }`
       : ''
   // Phase 9 (closing the Phase 5 legacy gap): edge-blur ring — a masked
   // backdrop-blur band over the outer edge, center stays crisp. Pure CSS.
@@ -169,6 +199,10 @@ function cssBody(config: GlassConfig): string {
   const wobble = Math.max(0, Math.min(1, config.wobble ?? 0))
   const wobbleAnimated = wobble > 0.01
   const wobblePeriod = ((5.5 - 3.5 * wobble) / motionSpeed).toFixed(1)
+  // Phase 16 M3: glare sweep period + root animation entry. The keyframes
+  // animate the registered <percentage> var (not background-position-x
+  // directly), so the drift's per-layer x lists keep working concurrently.
+  const glarePeriod = ((9 - 7 * glare) / motionSpeed).toFixed(1)
   const rootAnimations: string[] = []
   if (glowPulse > 0.01 && hasGlow) {
     rootAnimations.push(
@@ -185,6 +219,11 @@ function cssBody(config: GlassConfig): string {
   }
   if (wobbleAnimated) {
     rootAnimations.push(`glass-jelly ${wobblePeriod}s ease-in-out infinite`)
+  }
+  if (glareAnimated) {
+    rootAnimations.push(
+      `glass-glare-sweep ${glarePeriod}s ease-in-out infinite`
+    )
   }
   const glowAnimationRule =
     rootAnimations.length > 0 ? `\n  animation: ${rootAnimations.join(', ')};` : ''
@@ -238,15 +277,18 @@ function cssBody(config: GlassConfig): string {
   // per-layer longhand list (-x belongs to drift) so both animations
   // compose on the same root without shorthand clobbering — the previous
   // `background-position-x: 0px → 0px` no-op dropped the rise entirely.
+  // Phase 16 M3: glare also pins -x through the static var list, so rise
+  // switches to the -y longhand for glare too (same clobbering hazard).
+  const riseLonghand = driftAnimated || glareAnimated
   const bubbleRiseKeyframes = riseAnimated
     ? `\n\n/* 气泡上升（周期 ${risePeriod}s）— 无缝 200px 贴图循环上移${
-        driftAnimated ? '（与漂移双轴复合：-y 上升 / -x 摇摆）' : ''
+        riseLonghand ? '（与漂移/扫掠双轴复合：-y 上升 / -x 归属其它通道）' : ''
       } */\n@keyframes glass-bubble-rise {\n  from { ${
-        driftAnimated
+        riseLonghand
           ? `background-position-y: ${bgImages.map(() => '0px').join(', ')};`
           : `background-position: ${bgImages.map(() => '0 0').join(', ')};`
       } }\n  to { ${
-        driftAnimated
+        riseLonghand
           ? `background-position-y: ${bgImages
               .map((_, i) => (i === bubbleLayerIndex ? '-200px' : '0px'))
               .join(', ')};`
@@ -259,14 +301,33 @@ function cssBody(config: GlassConfig): string {
   // #108: per-layer x list — only the bubble layer sways; frost/brushed/
   // sparkle layers park at 0px so they don't ride along (engine parity:
   // the live drift animates the bubbles element alone).
+  // Phase 16 M3: the glare layer's entry follows var(--glass-glare-x) so
+  // the drift's x list and the glare sweep stay orthogonal channels.
   const bubbleDriftKeyframes = driftAnimated
     ? `\n\n/* 气平漂移（周期 ${driftPeriod}s，振幅 ${driftAmp}px）— 仅气泡层 background-position-x 正弦往复 */\n@property --glass-drift-amp {\n  syntax: "<length>";\n  initial-value: 0px;\n  inherits: false;\n}\n@keyframes glass-bubble-drift {\n  from { background-position-x: ${bgImages
       .map((_, i) =>
-        i === bubbleLayerIndex ? 'calc(0px - var(--glass-drift-amp))' : '0px'
+        i === bubbleLayerIndex
+          ? 'calc(0px - var(--glass-drift-amp))'
+          : i === glareLayerIndex
+            ? 'var(--glass-glare-x)'
+            : '0px'
       )
       .join(', ')}; }\n  to { background-position-x: ${bgImages
-      .map((_, i) => (i === bubbleLayerIndex ? 'var(--glass-drift-amp)' : '0px'))
+      .map((_, i) =>
+        i === bubbleLayerIndex
+          ? 'var(--glass-drift-amp)'
+          : i === glareLayerIndex
+            ? 'var(--glass-glare-x)'
+            : '0px'
+      )
       .join(', ')}; }\n}\n.liquid-glass { --glass-drift-amp: ${driftAmp}px; }`
+    : ''
+  // Phase 16 M3: glare sweep keyframes — the registered <percentage> var
+  // interpolates 100%→0% (both endpoints off-screen; loop restart invisible)
+  // with a 45% crossing / 55% dwell split. The static root declaration reads
+  // the var for the glare layer (see frostBg).
+  const glareKeyframes = glareAnimated
+    ? `\n\n/* 反光扫掠（周期 ${glarePeriod}s）— 斜向镜面高光带掠过表面，45% 扫过 + 55% 停驻 */\n@property --glass-glare-x {\n  syntax: "<percentage>";\n  initial-value: 100%;\n  inherits: false;\n}\n@keyframes glass-glare-sweep {\n  0% { --glass-glare-x: 100%; }\n  45% { --glass-glare-x: 0%; }\n  100% { --glass-glare-x: 0%; }\n}`
     : ''
   // Phase 14 M3: jelly keyframes — same block the live engine ships in
   // globals.css. Vars resolve per-element (inherited), so the root morph and
@@ -280,7 +341,8 @@ function cssBody(config: GlassConfig): string {
     riseAnimated ||
     driftAnimated ||
     wobbleAnimated ||
-    iriFlowAnimated
+    iriFlowAnimated ||
+    glareAnimated
       ? `\n\n@media (prefers-reduced-motion: reduce) {\n  .liquid-glass, .liquid-glass::before { animation: none !important; }\n}`
       : ''
   // Phase 15 M1: ::before may carry both the rim flow and the iridescent
@@ -337,7 +399,7 @@ function cssBody(config: GlassConfig): string {
   -webkit-mask-composite: xor;
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask-composite: exclude;
-}${edgeLayer}${glowPulseKeyframes}${rimFlowKeyframes}${iriFlowKeyframes}${bubbleRiseKeyframes}${bubbleDriftKeyframes}${jellyKeyframes}${motionGuard}`
+}${edgeLayer}${glowPulseKeyframes}${rimFlowKeyframes}${iriFlowKeyframes}${bubbleRiseKeyframes}${bubbleDriftKeyframes}${glareKeyframes}${jellyKeyframes}${motionGuard}`
 }
 
 /** Standalone CSS export. */
@@ -465,6 +527,8 @@ export function validateConfigObject(raw: unknown): GlassConfig | null {
     'sparkleTwinkle',
     'wobble',
     'dragBounce',
+    'dragSquash',
+    'glare',
   ] as const
   for (const k of numKeys) {
     const v = Number(merged[k])

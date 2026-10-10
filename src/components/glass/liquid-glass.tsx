@@ -372,6 +372,14 @@ function LiquidGlassImpl({
   const iriFlow = Math.max(0, Math.min(1, config.iriFlow ?? 0))
   const iriAnimated = iriFlow > 0.01 && iridescence > 0.01
   const iriFlowPeriod = ((7 - 5 * iriFlow) / motionSpeed).toFixed(1)
+  // Phase 16 M3: glare sweep — a diagonal specular band periodically crossing
+  // the surface (credit-card glint). The band rides a 250%-wide no-repeat
+  // gradient; background-position-x 100%→0% sweeps it left→right with both
+  // endpoints off-screen, so the loop restart is invisible. The keyframes
+  // dwell at the end (45% sweep / 55% rest) so the effect breathes.
+  const glare = Math.max(0, Math.min(1, config.glare ?? 0))
+  const glareAnimated = glare > 0.01
+  const glarePeriod = ((9 - 7 * glare) / motionSpeed).toFixed(1)
   const glowAnimated = glowPulse > 0.01 && !!glowColor
   const rimAnimated = rimFlow > 0.01
   // Frosted grain: feTurbulence -> white grain w/ noise-derived alpha.
@@ -772,6 +780,37 @@ function LiquidGlassImpl({
             }}
           />
         ))}
+
+      {/* Phase 16 M3: glare sweep — a diagonal specular band crossing the
+          surface on its own layer (engine parity with the export's
+          --glass-glare-x channel). No blend mode: plus-lighter on a backdrop
+          sibling isolates the backdrop root and voids the refraction (Phase 1
+          lesson) — plain alpha compositing over the texture layers. */}
+      {glare > 0.01 && (
+        <div
+          aria-hidden
+          data-glass-animated={glareAnimated ? '' : undefined}
+          className="pointer-events-none absolute inset-0"
+          style={{
+            ...radiusStyle(),
+            backgroundImage: `linear-gradient(115deg, transparent 30%, rgba(255,255,255,${(
+              glare * 0.42
+            ).toFixed(3)}) 48%, rgba(255,255,255,${(glare * 0.55).toFixed(3)}) 50%, rgba(255,255,255,${(
+              glare * 0.42
+            ).toFixed(3)}) 52%, transparent 70%)`,
+            backgroundSize: '250% 100%',
+            backgroundRepeat: 'no-repeat',
+            ...(glareAnimated
+              ? {
+                  animation: combo(
+                    jellyAnim,
+                    `glass-glare-sweep ${glarePeriod}s ease-in-out infinite`
+                  ),
+                }
+              : {}),
+          }}
+        />
+      )}
 
       {/* Phase 14 M1: thin-film iridescence — a spectral conic sheen masked
           to the edge band, anchored to the light angle (rotates live with

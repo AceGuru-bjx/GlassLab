@@ -8,7 +8,7 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
-import { motion, useReducedMotion } from 'framer-motion'
+import { motion, useReducedMotion, useSpring } from 'framer-motion'
 import { signIn, signOut, useSession } from 'next-auth/react'
 import {
   Backpack,
@@ -30,6 +30,8 @@ import {
   LogOut,
   MousePointer2,
   Palette,
+  Pencil,
+  RotateCcw,
   Rows3,
   Save,
   Search,
@@ -216,6 +218,8 @@ type NumericKey = keyof Pick<
   | 'sparkleTwinkle'
   | 'wobble'
   | 'dragBounce'
+  | 'dragSquash'
+  | 'glare'
 >
 
 const PARAM_ROWS: {
@@ -280,7 +284,18 @@ const PARAM_ROWS: {
   { key: 'wobble', label: '果冻形变', min: 0, max: 1, step: 0.01, fmt: v => (v <= 0.01 ? '关' : `${Math.round(v * 100)}%`) },
   // ---- Phase 15 M3: drag-release bounce (interaction feel, opt-in) ----
   { key: 'dragBounce', label: '拖拽回弹', min: 0, max: 1, step: 0.01, fmt: v => (v <= 0.01 ? '关' : `${Math.round(v * 100)}%`) },
+  // ---- Phase 16 M1: direction-aware squash & stretch (interaction feel) ----
+  { key: 'dragSquash', label: '拖拽形变', min: 0, max: 1, step: 0.01, fmt: v => (v <= 0.01 ? '关' : `${Math.round(v * 100)}%`) },
+  // ---- Phase 16 M3: glare sweep (period shortens with intensity) ----
+  { key: 'glare', label: '反光扫掠', min: 0, max: 1, step: 0.01, fmt: v => (v <= 0.01 ? '关' : `${(9 - 7 * v).toFixed(1)}s`) },
 ]
+
+/** #92/#115 root-cause fix: the phase label lives in ONE place — the header
+ *  badge and the footer text both derive from it, so a new phase can never
+ *  leave one of the two stale again. */
+const PHASE_LABEL = 'Phase 16 · 形变与镜面'
+const PHASE_FOOTER =
+  '第十六阶段 · 形变与镜面 / 拖拽形变 · 快捷键自定义 · 反光扫掠'
 
 /** Map a stage background option to the canvas cover generator spec. */
 function coverSpec(b: BackgroundOption): CoverBackgroundSpec {
@@ -352,10 +367,45 @@ const RANDOM_RANGES: Record<NumericKey, [number, number]> = {
   // Phase 15: flow & interaction feel are opt-in like every animation.
   iriFlow: [0, 0],
   dragBounce: [0, 0],
+  // Phase 16: drag squash is an interaction feel — opt-in, never random.
+  dragSquash: [0, 0],
+  // The glare sweep is visible motion — opt-in like every animation.
+  glare: [0, 0],
 }
 
 /** Phase 4 M3: variant jitter amplitude (±15% of the current value). */
 const VARIANT_JITTER = 0.15
+
+// ---- Phase 16 M2: remappable single-key shortcuts ----
+// The Ctrl/Cmd+Z family stays browser-native (never remapped); Esc is a
+// close-layer universal (never remapped). Redo rides Shift + the undo key,
+// so only the base key is stored per action.
+const KEYBIND_ACTIONS = [
+  { id: 'undo', desc: '撤销上一步参数' },
+  { id: 'random', desc: '随机灵感（锁定项不变）' },
+  { id: 'view', desc: '列表 ↔ 画廊视图切换' },
+  { id: 'compare', desc: '对比模式开关' },
+  { id: 'help', desc: '打开/关闭本帮助' },
+] as const
+type KeybindAction = (typeof KEYBIND_ACTIONS)[number]['id']
+type KeybindMap = Record<KeybindAction, string>
+const DEFAULT_KEYBINDS: KeybindMap = {
+  undo: 'z',
+  random: 'r',
+  view: 'v',
+  compare: 'c',
+  help: '?',
+}
+const KEYBINDS_STORAGE_KEY = 'glasslab-keybindings-v1'
+/** Accept single letters and digits only (shift-combos/space stay native). */
+const KEYBIND_PATTERN = /^[a-zA-Z0-9]$/
+/** Case-insensitive match for letters; symbol bindings match verbatim. */
+function keyMatches(pressed: string, binding: string): boolean {
+  if (binding.length === 1 && binding.toLowerCase() === binding.toUpperCase()) {
+    return pressed === binding
+  }
+  return pressed.toLowerCase() === binding.toLowerCase()
+}
 
 const randInt = (lo: number, hi: number) =>
   Math.floor(Math.random() * (hi - lo + 1)) + lo
@@ -1096,6 +1146,45 @@ export function GlassLab() {
           },
         }
       : undefined
+  // Phase 16 M1: direction-aware squash & stretch. A spring pair carries the
+  // anisotropic scale; during drag the framer onDrag info's velocity vector
+  // sets targets (stretch along the motion axis, 0.6-weighted squash
+  // perpendicular — volume-ish preservation), release springs back to 1.
+  // The values live on an inner wrapper div, so the outer motion.div keeps
+  // its drag position + whileDrag scale + bounce spring untouched; at
+  // dragSquash 0 the values never leave 1 → framer emits no transform
+  // (byte-identical resting render). reduced-motion skips deformation.
+  const dragSquash = Math.max(0, Math.min(1, config.dragSquash ?? 0))
+  const squashX = useSpring(1, { stiffness: 420, damping: 26, mass: 0.9 })
+  const squashY = useSpring(1, { stiffness: 420, damping: 26, mass: 0.9 })
+  const squashActive = dragSquash > 0.01 && !reduceMotion
+  const configRefForSquash = useRef(config)
+  configRefForSquash.current = config
+  const onSquashDrag = useCallback(
+    (_: unknown, info: { velocity: { x: number; y: number } }) => {
+      const s = configRefForSquash.current.dragSquash ?? 0
+      if (s <= 0.01) return
+      const vx = info.velocity.x
+      const vy = info.velocity.y
+      const speed = Math.hypot(vx, vy)
+      // ~2600 px/s saturates the effect; amplitude caps at 22% × dragSquash.
+      const k = Math.min(speed / 2600, 1) * 0.22 * s
+      if (k < 0.002) return
+      // Axis-aligned split: cos²/sin² weights stretch to the dominant axis
+      // (pure horizontal → scaleX only; diagonal → even split). Content
+      // stays upright — no rotation on the glass card itself.
+      const ang = Math.atan2(vy, vx)
+      const c2 = Math.cos(ang) ** 2
+      const s2 = Math.sin(ang) ** 2
+      squashX.set(1 + k * c2 - 0.6 * k * s2)
+      squashY.set(1 + k * s2 - 0.6 * k * c2)
+    },
+    [squashX, squashY]
+  )
+  const onSquashDragEnd = useCallback(() => {
+    squashX.set(1)
+    squashY.set(1)
+  }, [squashX, squashY])
   // Phase 12 M1: inertial tracking — the pointer publishes a target bearing
   // here; the smoothing loop eases the rendered angle toward it.
   const lightTargetRef = useRef<number | null>(null)
@@ -1232,6 +1321,98 @@ export function GlassLab() {
   // ---- Phase 13 M3: keyboard shortcuts + help dialog ----
   const [helpOpen, setHelpOpen] = useState(false)
 
+  // ---- Phase 16 M2: remappable single-key bindings ----
+  // State starts at defaults; stored preferences load AFTER mount (Phase 11
+  // hydration lesson — lazy localStorage restore, SSR markup stays stable).
+  // The live keydown handler reads through keybindsRef so remapping never
+  // re-binds the window listener; persistence writes on every change.
+  const [keybinds, setKeybinds] = useState<KeybindMap>(DEFAULT_KEYBINDS)
+  const [remapping, setRemapping] = useState<KeybindAction | null>(null)
+  const keybindsRef = useRef(keybinds)
+  keybindsRef.current = keybinds
+  const remappingRef = useRef<KeybindAction | null>(null)
+  remappingRef.current = remapping
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(KEYBINDS_STORAGE_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw) as Partial<KeybindMap>
+      const next = { ...DEFAULT_KEYBINDS }
+      for (const a of KEYBIND_ACTIONS) {
+        const v = parsed[a.id]
+        if (typeof v === 'string' && KEYBIND_PATTERN.test(v)) next[a.id] = v.toLowerCase()
+      }
+      setKeybinds(next)
+    } catch {
+      // Corrupted storage falls back to defaults silently.
+    }
+  }, [])
+  const applyKeybind = useCallback(
+    (action: KeybindAction, key: string) => {
+      const k = key.toLowerCase()
+      const next = { ...keybindsRef.current, [action]: k }
+      setKeybinds(next)
+      try {
+        localStorage.setItem(KEYBINDS_STORAGE_KEY, JSON.stringify(next))
+      } catch {
+        // Storage full/blocked — the session binding still applies.
+      }
+      return next
+    },
+    []
+  )
+  const resetKeybinds = useCallback(() => {
+    setKeybinds(DEFAULT_KEYBINDS)
+    setRemapping(null)
+    try {
+      localStorage.removeItem(KEYBINDS_STORAGE_KEY)
+    } catch {
+      /* best-effort */
+    }
+    toast({ title: '快捷键已恢复默认', description: 'Z / R / V / C / ?' })
+  }, [])
+  // Capture-phase listener while a remap is armed: swallows the key before
+  // the global shortcut layer (both live on window; capture fires first and
+  // stopPropagation keeps the bubble listener blind). Escape cancels, valid
+  // single keys commit (conflict-checked), anything else is rejected.
+  useEffect(() => {
+    if (!remapping) return
+    const onRemapKey = (e: KeyboardEvent) => {
+      e.preventDefault()
+      e.stopImmediatePropagation()
+      if (e.key === 'Escape') {
+        setRemapping(null)
+        return
+      }
+      if (!KEYBIND_PATTERN.test(e.key)) {
+        toast({
+          title: '无法绑定该按键',
+          description: '仅支持单个字母或数字（Esc 取消）',
+          variant: 'destructive',
+        })
+        return
+      }
+      const newKey = e.key.toLowerCase()
+      const owner = KEYBIND_ACTIONS.find(
+        a => a.id !== remapping && keybindsRef.current[a.id] === newKey
+      )
+      if (owner) {
+        toast({
+          title: '按键冲突',
+          description: `「${newKey.toUpperCase()}」已绑定「${owner.desc}」`,
+          variant: 'destructive',
+        })
+        return
+      }
+      setRemapping(null)
+      applyKeybind(remapping, newKey)
+      const actedDesc = KEYBIND_ACTIONS.find(a => a.id === remapping)?.desc ?? '快捷键'
+      toast({ title: '快捷键已更新', description: `「${actedDesc}」→ ${newKey.toUpperCase()}` })
+    }
+    window.addEventListener('keydown', onRemapKey, { capture: true })
+    return () => window.removeEventListener('keydown', onRemapKey, { capture: true })
+  }, [remapping, applyKeybind])
+
   // Keyboard shortcuts: Ctrl/Cmd+Z undo, Ctrl+Shift+Z / Ctrl+Y redo.
   // Phase 13 M3 single-key layer: Z undo / Shift+Z redo / R random
   // inspiration / V list↔gallery view / C compare / ? help. Skipped while
@@ -1239,6 +1420,7 @@ export function GlassLab() {
   // combination is held (browser shortcuts win), and undo/redo are also
   // gated while compare mode is on — compare panes hold their own configs,
   // not the stack. View/compare/help stay available everywhere.
+  // Phase 16 M2: the single-key layer consults keybindsRef (remappable).
   const randomizeConfigRef = useRef(randomizeConfig)
   randomizeConfigRef.current = randomizeConfig
   const undoRef = useRef(undo)
@@ -1249,6 +1431,7 @@ export function GlassLab() {
   presetViewRef.current = presetView
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (remappingRef.current) return
       const t = e.target as HTMLElement | null
       if (
         t &&
@@ -1273,20 +1456,21 @@ export function GlassLab() {
         return
       }
       const k = e.key
-      if (k === 'z' || k === 'Z') {
+      const kb = keybindsRef.current
+      if (keyMatches(k, kb.undo)) {
         e.preventDefault()
         if (e.shiftKey) redoRef.current()
         else undoRef.current()
-      } else if (k === 'r' || k === 'R') {
+      } else if (keyMatches(k, kb.random)) {
         e.preventDefault()
         randomizeConfigRef.current()
-      } else if (k === 'v' || k === 'V') {
+      } else if (keyMatches(k, kb.view)) {
         e.preventDefault()
         setPresetView(v => (v === 'list' ? 'gallery' : 'list'))
-      } else if (k === 'c' || k === 'C') {
+      } else if (keyMatches(k, kb.compare)) {
         e.preventDefault()
         setCompareOn(v => !v)
-      } else if (k === '?' || (k === '/' && e.shiftKey)) {
+      } else if (keyMatches(k, kb.help) || (k === '/' && e.shiftKey && kb.help === '?')) {
         e.preventDefault()
         setHelpOpen(v => !v)
       } else if (k === 'Escape') {
@@ -1697,7 +1881,7 @@ export function GlassLab() {
           </div>
           <div className="flex items-center gap-2">
             <span className="hidden rounded-full border border-teal-500/30 bg-teal-500/10 px-2.5 py-1 text-[10px] font-medium text-teal-600 sm:inline-block">
-              Phase 14 · 虹彩与星芒
+              {PHASE_LABEL}
             </span>
             {sessionStatus === 'loading' ? (
               <div className="h-8 w-20 animate-pulse rounded-lg bg-muted" aria-hidden />
@@ -2146,10 +2330,18 @@ export function GlassLab() {
                         dragMomentum={false}
                         whileDrag={{ scale: 1.03 }}
                         transition={dragBounceTransition}
+                        onDrag={onSquashDrag}
+                        onDragEnd={onSquashDragEnd}
                         className="pointer-events-auto cursor-grab active:cursor-grabbing"
                         data-testid="draggable-card"
                       >
-                        <GlassDemoCard config={config} dark={darkContent || config.overLight} />
+                        {/* Phase 16 M1: squash wrapper — springs hold the
+                            anisotropic scale; identity at rest (no transform) */}
+                        <motion.div
+                          style={squashActive ? { scaleX: squashX, scaleY: squashY } : undefined}
+                        >
+                          <GlassDemoCard config={config} dark={darkContent || config.overLight} />
+                        </motion.div>
                       </motion.div>
                     </div>
 
@@ -2159,18 +2351,30 @@ export function GlassLab() {
                       dragConstraints={stageRef}
                       dragElastic={config.elasticity}
                       transition={dragBounceTransition}
+                      onDrag={onSquashDrag}
+                      onDragEnd={onSquashDragEnd}
                       className="absolute left-6 top-6 z-10 cursor-grab active:cursor-grabbing"
                     >
-                      <GlassPill config={config} label="液态玻璃 · live" dark={bg.dark} />
+                      <motion.div
+                        style={squashActive ? { scaleX: squashX, scaleY: squashY } : undefined}
+                      >
+                        <GlassPill config={config} label="液态玻璃 · live" dark={bg.dark} />
+                      </motion.div>
                     </motion.div>
                     <motion.div
                       drag
                       dragConstraints={stageRef}
                       dragElastic={config.elasticity}
                       transition={dragBounceTransition}
+                      onDrag={onSquashDrag}
+                      onDragEnd={onSquashDragEnd}
                       className="absolute bottom-6 right-6 z-10 cursor-grab active:cursor-grabbing"
                     >
-                      <GlassPill config={config} label="拖我试试 ↕" dark={bg.dark} />
+                      <motion.div
+                        style={squashActive ? { scaleX: squashX, scaleY: squashY } : undefined}
+                      >
+                        <GlassPill config={config} label="拖我试试 ↕" dark={bg.dark} />
+                      </motion.div>
                     </motion.div>
 
                     {/* corner hint */}
@@ -2533,7 +2737,7 @@ export function GlassLab() {
 
       <AuthDialog open={authOpen} onOpenChange={setAuthOpen} />
 
-      {/* ---------- Phase 13 M3: shortcut help dialog ---------- */}
+      {/* ---------- Phase 13 M3: shortcut help dialog (Phase 16 M2: remap) ---------- */}
       <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -2543,41 +2747,103 @@ export function GlassLab() {
             </DialogTitle>
             <DialogDescription className="text-xs">
               输入框/色板聚焦时自动让位；带修饰键的组合仍归浏览器（Ctrl+Z 等照常可用）。
+              点「换键」后按新键即可重绑（Esc 取消）。
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-1.5">
-            {(
-              [
-                { keys: ['Z'], desc: '撤销上一步参数' },
-                { keys: ['Shift', 'Z'], desc: '重做' },
-                { keys: ['R'], desc: '随机灵感（锁定项不变）' },
-                { keys: ['V'], desc: '列表 ↔ 画廊视图切换' },
-                { keys: ['C'], desc: '对比模式开关' },
-                { keys: ['?'], desc: '打开/关闭本帮助' },
-                { keys: ['Esc'], desc: '关闭弹层/帮助' },
-              ] as { keys: string[]; desc: string }[]
-            ).map(row => (
-              <div
-                key={row.desc}
-                className="flex items-center justify-between gap-3 rounded-lg border-border/60 px-2.5 py-1.5"
-              >
-                <span className="text-xs text-muted-foreground">{row.desc}</span>
-                <span className="flex items-center gap-1">
-                  {row.keys.map(k => (
+            {KEYBIND_ACTIONS.map(action => {
+              const isRemapping = remapping === action.id
+              const isCustom = keybinds[action.id] !== DEFAULT_KEYBINDS[action.id]
+              return (
+                <div
+                  key={action.id}
+                  className={`flex items-center justify-between gap-3 rounded-lg border px-2.5 py-1.5 transition-colors ${
+                    isRemapping
+                      ? 'border-teal-500/60 bg-teal-500/10'
+                      : 'border-border/60'
+                  }`}
+                >
+                  <span className="text-xs text-muted-foreground">
+                    {action.desc}
+                    {isCustom && (
+                      <span className="ml-1.5 rounded-full bg-teal-500/15 px-1.5 py-0.5 text-[9px] font-medium text-teal-600 dark:text-teal-400">
+                        自定义
+                      </span>
+                    )}
+                  </span>
+                  <span className="flex items-center gap-1.5">
                     <kbd
-                      key={k}
-                      className="rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] font-semibold text-foreground shadow-[inset_0_-1px_0_0_rgba(0,0,0,0.08)]"
+                      className={`rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase text-foreground shadow-[inset_0_-1px_0_0_rgba(0,0,0,0.08)] ${
+                        isRemapping ? 'animate-pulse border-teal-500/70 text-teal-600 dark:text-teal-400' : ''
+                      }`}
                     >
-                      {k}
+                      {keybinds[action.id]}
                     </kbd>
-                  ))}
-                </span>
-              </div>
-            ))}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={`h-6 px-2 text-[10px] ${
+                        isRemapping ? 'text-teal-600 dark:text-teal-400' : 'text-muted-foreground'
+                      }`}
+                      aria-pressed={isRemapping}
+                      data-testid={`remap-${action.id}`}
+                      onClick={() => setRemapping(isRemapping ? null : action.id)}
+                    >
+                      {isRemapping ? (
+                        <>
+                          <Loader2 className="mr-0.5 h-3 w-3 animate-spin" aria-hidden />
+                          按新键…
+                        </>
+                      ) : (
+                        <>
+                          <Pencil className="mr-0.5 h-3 w-3" aria-hidden />
+                          换键
+                        </>
+                      )}
+                    </Button>
+                  </span>
+                </div>
+              )
+            })}
+            {/* Fixed rows (never remappable) */}
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-border/50 px-2.5 py-1.5">
+              <span className="text-xs text-muted-foreground">
+                重做（跟随撤销键）
+              </span>
+              <span className="flex items-center gap-1">
+                <kbd className="rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase text-foreground shadow-[inset_0_-1px_0_0_rgba(0,0,0,0.08)]">
+                  Shift
+                </kbd>
+                <kbd className="rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase text-foreground shadow-[inset_0_-1px_0_0_rgba(0,0,0,0.08)]">
+                  {keybinds.undo}
+                </kbd>
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-border/50 px-2.5 py-1.5">
+              <span className="text-xs text-muted-foreground">关闭弹层/帮助</span>
+              <span className="flex items-center gap-1">
+                <kbd className="rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] font-semibold text-foreground shadow-[inset_0_-1px_0_0_rgba(0,0,0,0.08)]">
+                  Esc
+                </kbd>
+              </span>
+            </div>
           </div>
-          <p className="text-[10px] leading-relaxed text-muted-foreground">
-            触屏无键盘？所有功能均有对应的屏幕控件——快捷键只是效率增强，不是唯一路径。
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] leading-relaxed text-muted-foreground">
+              触屏无键盘？所有功能均有对应的屏幕控件——快捷键只是效率增强，不是唯一路径。
+              自定义保存在本机浏览器。
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 shrink-0 px-2.5 text-[10px]"
+              data-testid="keybind-reset"
+              onClick={resetKeybinds}
+            >
+              <RotateCcw className="mr-1 h-3 w-3" aria-hidden />
+              恢复默认
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -2596,7 +2862,7 @@ export function GlassLab() {
             </a>{' '}
             (Apache-2.0)
           </span>
-          <span>第十五阶段 · 流光溢彩 / 虹彩流动 · 星芒颜色 · 拖拽回弹 · 样式库 {PRESETS.length} 款</span>
+          <span>{PHASE_FOOTER} · 样式库 {PRESETS.length} 款</span>
         </div>
       </footer>
     </div>
