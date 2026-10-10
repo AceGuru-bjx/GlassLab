@@ -92,6 +92,10 @@ function cssBody(config: GlassConfig): string {
   const bubbleRise = Math.max(0, Math.min(1, config.bubbleRise ?? 0))
   const bgImages: string[] = []
   const bgSizes: string[] = []
+  // #108: track where the bubble tile actually sits in the background
+  // stack — sparkle seeds push after it, so "last index" is not the bubble
+  // layer and every per-layer position list must key off this index.
+  let bubbleLayerIndex = -1
   if (frost > 0.01) {
     bgImages.push(`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 ${frostGrain} ${frostGrain} ${frostGrain} 0 0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E")`)
     bgSizes.push('180px 180px')
@@ -101,6 +105,7 @@ function cssBody(config: GlassConfig): string {
     bgSizes.push('240px 240px')
   }
   if (bubbles > 0.01) {
+    bubbleLayerIndex = bgImages.length
     bgImages.push(`url("${bubblesDataUri(bubbles * 0.55, bubbleSize, bubbleDensity)}")`)
     bgSizes.push('200px 200px')
   }
@@ -208,29 +213,42 @@ function cssBody(config: GlassConfig): string {
       ? `\n\n/* 高光流动（周期 ${rimFlowPeriod}s）— @property 注册 <angle> 平滑插值 */\n@property --glass-rim-angle {\n  syntax: "<angle>";\n  initial-value: 0deg;\n  inherits: false;\n}\n@keyframes glass-rim-flow {\n  from { --glass-rim-angle: var(--glass-rim-start); }\n  to { --glass-rim-angle: calc(var(--glass-rim-start) + 360deg); }\n}`
       : ''
   // Bubble rise: the seamless 200px tile shifts up by exactly one tile.
-  // background-position must list every background-image layer — bubbles is
-  // always the last one pushed onto the stack, the others hold still.
-  // Phase 13 M1: with drift on, the rise keyframes switch to per-axis
-  // longhands (-x holds still for rise; -y holds still for drift) so both
-  // animations compose on the same root without shorthand clobbering.
+  // background-position must list every background-image layer — the lists
+  // below key off bubbleLayerIndex (sparkle seeds push after the bubbles, so
+  // "last index" would land the -200px on a 220px tile, #108).
+  // Phase 13 M1: with drift on, rise owns background-position-y as a
+  // per-layer longhand list (-x belongs to drift) so both animations
+  // compose on the same root without shorthand clobbering — the previous
+  // `background-position-x: 0px → 0px` no-op dropped the rise entirely.
   const bubbleRiseKeyframes = riseAnimated
     ? `\n\n/* 气泡上升（周期 ${risePeriod}s）— 无缝 200px 贴图循环上移${
         driftAnimated ? '（与漂移双轴复合：-y 上升 / -x 摇摆）' : ''
       } */\n@keyframes glass-bubble-rise {\n  from { ${
         driftAnimated
-          ? 'background-position-x: 0px;'
+          ? `background-position-y: ${bgImages.map(() => '0px').join(', ')};`
           : `background-position: ${bgImages.map(() => '0 0').join(', ')};`
       } }\n  to { ${
         driftAnimated
-          ? 'background-position-x: 0px;'
+          ? `background-position-y: ${bgImages
+              .map((_, i) => (i === bubbleLayerIndex ? '-200px' : '0px'))
+              .join(', ')};`
           : `background-position: ${bgImages
-              .map((_, i) => (i === bgImages.length - 1 ? '0 -200px' : '0 0'))
+              .map((_, i) => (i === bubbleLayerIndex ? '0 -200px' : '0 0'))
               .join(', ')};`
       } }\n}`
     : ''
   // Phase 13 M1: horizontal sway keyframes + the @property amplitude hook.
+  // #108: per-layer x list — only the bubble layer sways; frost/brushed/
+  // sparkle layers park at 0px so they don't ride along (engine parity:
+  // the live drift animates the bubbles element alone).
   const bubbleDriftKeyframes = driftAnimated
-    ? `\n\n/* 气平漂移（周期 ${driftPeriod}s，振幅 ${driftAmp}px）— background-position-x 正弦往复 */\n@property --glass-drift-amp {\n  syntax: "<length>";\n  initial-value: 0px;\n  inherits: false;\n}\n@keyframes glass-bubble-drift {\n  from { background-position-x: calc(0px - var(--glass-drift-amp)); }\n  to { background-position-x: var(--glass-drift-amp); }\n}\n.liquid-glass { --glass-drift-amp: ${driftAmp}px; }`
+    ? `\n\n/* 气平漂移（周期 ${driftPeriod}s，振幅 ${driftAmp}px）— 仅气泡层 background-position-x 正弦往复 */\n@property --glass-drift-amp {\n  syntax: "<length>";\n  initial-value: 0px;\n  inherits: false;\n}\n@keyframes glass-bubble-drift {\n  from { background-position-x: ${bgImages
+      .map((_, i) =>
+        i === bubbleLayerIndex ? 'calc(0px - var(--glass-drift-amp))' : '0px'
+      )
+      .join(', ')}; }\n  to { background-position-x: ${bgImages
+      .map((_, i) => (i === bubbleLayerIndex ? 'var(--glass-drift-amp)' : '0px'))
+      .join(', ')}; }\n}\n.liquid-glass { --glass-drift-amp: ${driftAmp}px; }`
     : ''
   // Phase 14 M3: jelly keyframes — same block the live engine ships in
   // globals.css. Vars resolve per-element (inherited), so the root morph and

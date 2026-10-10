@@ -221,6 +221,15 @@ function LiquidGlassImpl({
   const wobble = Math.max(0, Math.min(1, config.wobble ?? 0))
   const wobbleAnimated = wobble > 0.01
   const wobblePeriod = ((5.5 - 3.5 * wobble) / motionSpeed).toFixed(1)
+  // #106: the jelly morph composes with every per-layer animation channel
+  // (border-radius vs opacity / background-position / custom properties),
+  // so layers with their own motion append it as a comma-list entry instead
+  // of letting a later `animation` key overwrite the radiusStyle injection.
+  const jellyAnim = wobbleAnimated
+    ? `glass-jelly ${wobblePeriod}s ease-in-out infinite`
+    : ''
+  const combo = (...anims: string[]) =>
+    anims.filter(Boolean).join(', ') || undefined
 
   const radiusStyle = useCallback(
     (extra?: number): React.CSSProperties => ({
@@ -362,6 +371,7 @@ function LiquidGlassImpl({
   return (
     <div
       ref={hostRef}
+      data-glass-jelly={wobbleAnimated ? '' : undefined}
       className={`relative ${className ?? ''}`}
       style={{
         ...style,
@@ -573,7 +583,12 @@ function LiquidGlassImpl({
           style={{
             ...radiusStyle(),
             boxShadow: `0 0 ${glowSpread}px ${(glowSpread / 12).toFixed(1)}px ${glowColor}`,
-            animation: `glass-glow-pulse ${glowPulsePeriod}s ease-in-out infinite alternate`,
+            // #106: glow breathing (opacity) + jelly morph (border-radius)
+            // compose as a comma list — the breathing layer follows the blob.
+            animation: combo(
+              jellyAnim,
+              `glass-glow-pulse ${glowPulsePeriod}s ease-in-out infinite alternate`
+            ),
           }}
         />
       )}
@@ -689,8 +704,9 @@ function LiquidGlassImpl({
               ? ({ '--glass-drift-amp': `${driftAmp}px` } as React.CSSProperties)
               : {}),
             animation:
-              bubbleRise > 0.01 || bubbleDrift > 0.01
+              bubbleRise > 0.01 || bubbleDrift > 0.01 || wobbleAnimated
                 ? [
+                    jellyAnim,
                     bubbleRise > 0.01
                       ? `glass-bubble-rise ${bubbleRisePeriod.toFixed(1)}s linear infinite`
                       : '',
@@ -722,11 +738,20 @@ function LiquidGlassImpl({
               backgroundSize: '220px 220px',
               ...(sparkleAnimated
                 ? {
-                    animation: `glass-sparkle ${(
-                      i === 0 ? twinklePeriodA : twinklePeriodB
-                    ).toFixed(1)}s ease-in-out infinite alternate`,
+                    animation: combo(
+                      jellyAnim,
+                      `glass-sparkle ${(
+                        i === 0 ? twinklePeriodA : twinklePeriodB
+                      ).toFixed(1)}s ease-in-out infinite alternate`
+                    ),
+                    // The delay list maps per-animation: jelly parks at 0s,
+                    // seed B's twinkle keeps its half-phase offset (#106).
                     animationDelay:
-                      i === 1 ? `-${(twinklePeriodB / 2).toFixed(1)}s` : undefined,
+                      i === 1
+                        ? wobbleAnimated
+                          ? `0s, -${(twinklePeriodB / 2).toFixed(1)}s`
+                          : `-${(twinklePeriodB / 2).toFixed(1)}s`
+                        : undefined,
                   }
                 : {}),
             }}
@@ -778,7 +803,12 @@ function LiquidGlassImpl({
               ? ({
                   '--glass-rim-start': `${rimAngle}deg`,
                   '--glass-rim-angle': `${rimAngle}deg`,
-                  animation: `glass-rim-flow ${rimFlowPeriod}s linear infinite`,
+                  // #106: rim flow (<angle> var) + jelly morph (border-radius)
+                  // compose as a comma list.
+                  animation: combo(
+                    jellyAnim,
+                    `glass-rim-flow ${rimFlowPeriod}s linear infinite`
+                  ),
                 } as React.CSSProperties)
               : {}),
             background: `linear-gradient(${

@@ -314,9 +314,13 @@
   }
 }
 
-/* Accessibility: motion is an enhancement, never a requirement (#88). */
+/* Accessibility: motion is an enhancement, never a requirement (#88).
+ * #107: the jelly morph reaches layers through inline styles rather than
+ * the data-attribute channel, so the wobble host carries data-glass-jelly
+ * and every direct stack child stops under reduced motion too. */
 @media (prefers-reduced-motion: reduce) {
-  [data-glass-animated] {
+  [data-glass-animated],
+  [data-glass-jelly] > * {
     animation: none !important;
   }
 }
