@@ -393,3 +393,31 @@ Stage Summary:
 未解决/风险与下一步建议：
 - PR #364 仍待 Ultra-Guru 维护者评审（正常等待）
 - 下轮候选：①气泡水平漂移（background-position-x 往复）与拉丝方向跟随 lightAngle 联动选项；②动效预设专属「动效」分类 tab 或动效徽章标记；③辉光呼吸与气泡上升的相位差参数（错落感）；④导出 React 组件的动效 demo 页；⑤第六轮深度检查（覆盖 Phase 10 新增约 400 行）
+
+---
+Task ID: 17
+Agent: Z.ai Code (webDevReview 定时巡检)
+Task: 巡检轮——QA 冒烟发现 1 文案 bug #92 后自主开发第十一阶段「光影物理与灵感画廊」：方向性投影（#93）/ 光源跟随（#94）/ 预设画廊（#95）
+
+Work Log:
+- 前置核实：worklog Task 16 闭环态；git 1de5c68 与远程同步、CI 绿、dev server 200、PR #364 open（仅 CI 机器人评论）、0 open issue、DB 全零（浏览器残留 stale JWT Qqa-smoke 已登出，既有安全裁决降级无害）
+- agent-browser 全站 QA 冒烟（无新功能 bug）：7-tap 引擎 DOM（21 feDisp/18 feComp）、23 滑杆、键盘滑杆+撤销（30→Ctrl+Z→28）、深海涌动双动画、导出三格式、#54 字面量防护、分享深载入 dispersion 0.7、A/B 对比进出干净、390px 零溢出、0 console error——发现唯一缺陷：**Header 徽章仍显示 Phase 9**（Task 16 只更新了 Footer）→ #92 建档
+- 自主规划第十一阶段（Task 16 worklog 候选中光效方向的深化）：
+- M1（#93）方向性投影：GlassConfig + shadowIntensity(0..1)/shadowDistance(0..40)/shadowSoftness(0..60) 三参数默认 0/14/28；影子方向 = lightAngle 对侧 `(dx,dy)=(sinθ·d,-cosθ·d)`（与 rim 渐变亮边互补，CSS/canvas 同坐标系）；引擎 backdrop 层 box-shadow 栈追加（辉光呼吸时投影由专用静态回退层承载，不随呼吸脉动）；glow-pulse 关键帧 from/to 两态携带完整投影栈；cover 1.1×/snapshot 4× shadowOffset 近似；新预设晨光悬浮/暮色剪影/悬浮岛，53 款（8/15/11/19）
+- M2（#94）交互式光源：lightFollow——舞台 pointermove → rAF 节流 → atan2(卡片中心→指针) 整度角（跟随连续更新不入撤销栈，开关本身单一 checkpoint）；brushedFollow——拉丝有效角=(light+90)%360（引擎 data-URI/cover/snapshot/export 全链路烘焙）；ConfigPanel 双开关；API zod bool default + validateConfigObject boolKeys
+- M3（#95）预设画廊：新组件 preset-gallery.tsx——IntersectionObserver 懒渲染 canvas 实时封面（复用 cover.ts 管线，serialized promise queue 串行生成，(bgKey:presetId) 缓存 Map，失败静默回退 swatch）；列表↔画廊视图切换 + localStorage 持久化；「动效」跨分类筛选 chips（isMotionConfig：glowPulse/rimFlow/bubbleRise>0.01）+ 列表 swatch/画廊右上双视图动效徽章；Header/Footer 第十一阶段文案（连带修 #92）
+- 实施即查即改 4 起：①MultiEdit 模板字面量丢换行 + effectiveBrushedAngle 前向引用 TDZ → 重排声明序；②react-hooks/refs「Cannot update ref during render」→ specRef 同步改 useEffect；③react-hooks/set-state-in-effect → setCovers({}) rAF 包装（代码库既有惯例）；④**hydration 错配**——presetView localStorage 惰性初始化在客户端首渲染返回 'gallery' 与 SSR 'list' 不一致 → 改为挂载后恢复（全新会话 0 console error）
+- E2E 验证矩阵全绿：投影数学逐项精确（晨光悬浮 30°/20px → 10px/-17.3px/0.275；0° → 0/-20；导出 285° → -30.9/-8.3）；跟随角度 (900,400)→102°/(480,300)→285°；撤销恢复 follow 开关前置态；拉丝 60°→45°；API 4 例（legacy 201 默认/new 201/2→400/"yes"→400）；分享 33 键往返（285/0.7/32/46）；画廊懒渲染 15→31；动效筛选 6 款；背景切换封面重渲染；reload 恢复 gallery；对比模式禁用跟随；辉光+投影分层（animationName 分离）；390px 零溢出；0 console error；VLM 视觉实证悬浮岛投影三问皆「是」；测试数据清理归零
+- 提交 49c24c5 推送 → CI 四门禁全绿 → #92-#95 报告回帖关闭 → Project 全 Done
+
+Stage Summary:
+- 第十一阶段三里程碑闭环：物理一致的方向性投影系统（光源-影子-拉丝三联动）/ 光标即光源交互 / canvas 实时画廊 + 动效维度组织
+- GlassConfig 参数 31→36（+shadowIntensity/shadowDistance/shadowSoftness/lightFollow/brushedFollow），全部默认值后向兼容（存量观感不变，旧载荷 201 补默认）
+- 样式库 50→53 款；样式库首次获得「视图」维度（列表/画廊）与「动效」筛选维度
+- 关键决策：①投影与辉光呼吸分层（呼吸动画只作用于辉光层，投影静态回退层承载）；②跟随更新不入撤销栈（开关是手势，移动是持续状态）；③画廊封面复用 cover 管线而非新渲染器（零重复代码、与保存预设封面同构）；④localStorage 偏好一律挂载后恢复（防 hydration 错配，本次实证教训）
+- 沉淀陷阱：①agent-browser close 重启 = 全新浏览器 profile（localStorage 清空）——持久化测试必须用 reload 而非 close+open；②eval 合成 click 不触发 React onClick（老陷阱重演——视图切换必须 find testid click）；③嵌套滚动容器的懒渲染 IntersectionObserver 用 root:null 即可（祖先裁剪自动纳入计算），但别在内层重复 overflow-y-auto（真正滚动的是外层容器，内层无高度约束不可滚）；④分享链接深载入测试 sed 剥 `#g=` 时记得 URL 要重新带上 `g=` 前缀（本次连环误诊的根源）
+- GitHub 产物：repo 推进至 49c24c5（CI 四门禁全绿）、issues #92-#95 闭环（报告回帖）、Project 四条目 Done
+
+未解决/风险与下一步建议：
+- PR #364 仍待 Ultra-Guru 维护者评审（正常等待，无新评论）
+- 下轮候选：①投影颜色参数化（当前固定深蓝黑，可开放 tint 联动或自定义）；②光源跟随的惯性/缓动（当前瞬时跳转，可加 lerp 平滑）；③画廊封面的预设局部放大预览（hover 现图 vs 点击大图）；④动效预设专属「动效」分类 tab（现为筛选 chips，可升级为独立分类）；⑤第七轮深度检查（覆盖 Phase 11 新增约 640 行）
