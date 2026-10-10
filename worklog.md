@@ -234,3 +234,25 @@ Stage Summary:
 - 「高斯模糊等新效果」功能需求按本轮指令删除：未做任何新功能开发，#49 已交付的 frost/edgeBlur/vignette 保留并按 bug 口径复核（三效果实装、导出、封面全链路核验通过）
 - 沉淀陷阱：①grep|head 截断输出会制造假死代码定罪——删除类清理必须全量核对引用；②agent-browser fill 空串对受控输入失联（须原生 setter+input 事件）；③agent-browser keydown 修饰键跨 CLI 调用不保持（组合键 press Shift+X 是可靠路径）；④eval 探针选择器三度误报（vignette 样式归一化丢 ellipse at center、url 背景过滤条件过严、bgStyle 挂在 stage 根）——DOM 断言前先枚举全量再过滤；⑤prisma db execute 需显式 --schema 否则静默打印 help
 - GitHub 产物：issues #57–#64 全闭环（报告回帖）、Project 条目全 Done、repo 推进至 92ae4ab、CI 四阶段全绿
+
+---
+Task ID: 11
+Agent: Z.ai Code (main agent)
+Task: 第六阶段功能增强：M1 PNG 场景快照导出 / M2 预设归属徽章与视图筛选 / M3 配置文件导入导出（issues #65-#67）
+
+Work Log:
+- 前置核实：Phase 1-5 与第三轮检查全闭环（#1-#64 closed，main @ 0b539ea 与远程同步，dev server 在线）；读实态代码（glass-lab 1817 行 / cover.ts / export.ts / presets API / schema）后规划三里程碑
+- 建任务：#65/#66/#67 创建并入 Project v2，正文延续冲突裁决规则（无 bug 以之前为准），未含任何被删除的高斯模糊新需求
+- M1（a641b58，CI 绿）：新建 src/lib/glass/snapshot.ts——1600×1000 Canvas2D 全尺寸快照（glow→裁剪背景 blur+saturate→tint→overLight→vignette→菲涅尔 rim→角标水印），卡片为 cover 的 4 倍故圆角/模糊按比例放大（0.6×4=2.4 系数）；ExportPanel 增「PNG 快照」区块（toBlob→ObjectURL→a[download]，revoke 延迟 4s）；Header/Footer 第六阶段文案
+- M1 验证教训：E2E 期间连环遭遇工具性问题——agent-browser refs 全页漂移（tab 切换后旧 ref 指向错误元素，e61 从「下载按钮」漂移为「我的预设 tab」）、find role click --name 模糊匹配命中同名前缀按钮（「极光」命中预设样式「极光玻璃」而非背景「极光」）、eval 合成 click 不触发 React onClick（hasLoader=false 实证）、CDP 通道半失效——最终用「fresh snapshot + 坐标点击 + 直接调 __reactProps$.onClick 二分定位」排除，全部为工具问题非应用 bug；渐变/图片双背景下载 + toast + 同源不污染画布（toBlob 2.3MB）全过
+- M2（3dbd322，CI 绿）：GET /api/presets 加 view 参数（all|mine|public 默认 all）：登录 all=OR[私有,公共]、mine=仅私有（游客=良定义空集不报错）、public=仅公共；响应每条加 mine（POST 同步）；UI 登录态三枚筛选 chips（aria-pressed）+ 归属徽章（我的=teal/公共=neutral），游客维持现状
+- M2 自查即改：curl 首轮发现 view 未传入 safeParse（view=bogus 200 且切片不生效）——修复后 11 例 curl 矩阵全过（游客 all=public/mine 空集/bogus 400/登录混合+徽章数据/q/sort/view 三参组合）；浏览器真实登录 E2E（注册→登录→chips→筛选→徽章→登出回退）全通
+- M3（0215bde，CI 绿）：export.ts 抽共享校验 validateConfigObject（decodeConfig 与文件导入同口径）；ExportPanel 增「配置文件」区块（导出 Blob JSON 下载 / 导入 hidden file input→FileReader→校验→入撤销栈+darkContent 重算+toast 带文件名；input value 重置支持重选同文件）
+- M3 验证：导出 Blob 342B+toast；导入合法文件 EXACT_MATCH 逐键还原（refraction 28→55 等 7 键）；Ctrl+Z 撤销回基线；非法 JSON/NaN/类型错三坏例全被拒且配置零污染；{"broken":true} 按 DEFAULT_CONFIG 合并导入=与分享链接既有口径一致（冲突裁决，非缺陷）；390px 零溢出、0 console error
+- 闭环：三里程碑报告回帖（#65/#66/#67）→ Project 三条目 Done → CI run 38038585327/3dbd322/0215bde 全绿 → 测试账号 m2probe 与 2 条 M2 测试预设已 prisma db execute 级联清理
+
+Stage Summary:
+- 第六阶段三里程碑全部闭环：PNG 快照导出 / 预设互通视图筛选 / 配置文件 I/O
+- 关键决策：快照复用 cover 近似渲染管线但全部尺寸参数化（4× 缩放系数）；view=mine 游客返回空集而非 400（UI 空态统一复用）；validateConfigObject 共享口径保证分享链接与文件导入行为完全一致；导入必入撤销栈（Ctrl+Z 可回退）
+- 沉淀陷阱：①agent-browser refs 在 tab 切换后全页重排，跨命令引用必失效——每次交互前 fresh snapshot；②find role --name 子串匹配会命中前缀相同按钮——语义定位必须全名精确；③此环境下 eval 合成 click 不触发 React onClick（用 __reactProps$ 直接调用可绕过并定位 handler 层问题）；④新增查询参数必须同步传入 safeParse 对象（schema 定义≠参数接线，curl 实测才能暴露）；⑤toBlob 的 revokeObjectURL 是延迟 4s 调用，断言需等足时长
+- GitHub 产物：repo 推进至 0215bde（29 commits、CI 四阶段全绿）、issues #65-#67 全闭环（报告回帖）、Project 第六阶段条目全 Done
