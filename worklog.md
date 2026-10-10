@@ -480,3 +480,34 @@ Stage Summary:
 - PR #364 仍待 Ultra-Guru 维护者评审（正常等待，无新评论）
 - 快捷键 help Dialog 的移动端价值有限（触屏无键盘）——已有触屏说明文案，可考虑下次巡检验证 390px 下 Dialog 布局
 - 下轮候选：①第九轮深度检查（覆盖 Phase 12+13 新增约 670 行——连续两阶段未做深度检查，按节奏应优先）；②气泡漂移与光源联动（漂移方向跟随 lightAngle）；③快捷键自定义面板（用户重映射）；④导出 React 组件的动效 demo 页（Phase 9 遗留候选）；⑤辉光呼吸与 rimFlow 的相位差参数
+
+---
+Task ID: 20
+Agent: Z.ai Code (main agent)
+Task: 项目状态评估轮——QA 冒烟全绿（无新 bug）后自主开发第十四阶段「虹彩与星芒」：薄膜虹彩系统（#103）/ 星芒粒子系统（#104）/ 果冻形变动画（#105）
+
+Work Log:
+- 前置核实：worklog Task 19 闭环态；git 37b9f1b 与远程同步、CI 绿、0 open issue、dev server 200、DB 全零、PR #364 open 正常等待
+- agent-browser 全站 QA 冒烟（11 项全绿，无新 bug）：57 预设/7-tap 引擎 DOM（21 feDisp/18 feComp）/29 滑杆/深海涌动双动画/Z 撤销快捷键（24→28 栈底）/V 视图切换/? 帮助面板（8 kbd）+Esc/CSS 导出面板完整/无效分享载荷容错 toast/390px+1440px 零溢出/0 console error
+- 依用户指令「样式细节化、功能增量化」规划 Phase 14「虹彩与星芒」，建 #103/#104/#105 入 Project Todo（GraphQL addProjectV2ItemById——REST issue id 非 GraphQL 节点 id，需先查 issue node id）
+- M1（#103）薄膜虹彩：iridescence（0..1）+ iridescenceWidth（2..12px）双参数；光谱 conic-gradient（8 档停靠）掩膜到边缘环带、from 角锚定 lightAngle（lightFollow 实时联动）；0.5px blur 软化带边缘；CSS 导出 ::before 组合层（rim 置顶+conic 次层，padding=max(1.5,w)，关闭时字节级一致）；cover/snapshot 用 createConicGradient 描边近似（特征检测，canvas 起点补偿 -90°）
+- M2（#104）星芒粒子：sparkle/sparkleSize/sparkleTwinkle 三参数；sparkleDataUri 220×220 无缝贴图（四芒星 quadraticCurve 星形 w=0.18len、LCG 确定性 9 星布局、逐星 alpha 烘焙）；双种子双子层（11/47）coprime 周期 ×1.618 + 半相位延迟 -T/2 交替闪烁；glass-sparkle opacity keyframes + reduced-motion 守卫；CSS 导出静态双种子里（闪烁引擎专属，与 lightFollow 同裁决）
+- M3（#105）果冻形变：wobble 单参数驱动振幅+节奏（周期 5.5-3.5v）；glass-jelly keyframes 全 4+4 角形式（8 值 shorthand 保证关键帧间插值）+ calc(var(--glass-jelly-r)·(1±k·var(--glass-jelly-amp)))；host 挂继承变量 → 整栈 15 层 lockstep 形变；关键帧 cascade 优先级高于内联 border-radius，radiusStyle 注入 animation；导出同构 + ::before/::after 经 border-radius:inherit 免费跟随
+- **实施中发现并即修 1 个设计缺陷**：isMotionConfig 未联锁 sparkle 开关——sparkleTwinkle 默认 0.45 使全部 57 款 sparkle=0 存量预设误标「动效」徽章 → 修复为 (sparkle>0.01 && sparkleTwinkle>0.01)；bun 模块级验证 13/64 与浏览器画廊徽章实测名单完全一致（既有 8 + 新 5）
+- 实施中即查即改 2 起：①iriA 辅助函数把 rgb 串当度数键查表（编译期发现即改双参签名）；②motionSpeed 声明在 wobble 块之后 TDZ（浏览器报 Cannot access before initialization——tsc 不查跨声明使用顺序的运行时时序）→ 声明上移并加注释
+- GlassConfig 40→46 参数、样式库 57→64（油膜幻彩/蚌壳珠光/极光闪粉/泡泡虹彩/星河碎片/钻石星尘/水润果冻，8/17/14/25）、动效徽章 8→13
+- E2E 验证矩阵全绿：M1 conic from 45→50 光源联动精确；M2 双子层 1.6s/2.6s alternate + delay -1.3s（公式吻合）；M3 15 层 glass-jelly 3.9s + host vars 36px/0.450 + 活体形变帧四角 38.02/35.60/37.15/36.01px；motionSpeed 联动 3.8s→1.9s 精确减半；CSS/React/JSON 导出全结构（conic/星芒 URI/jelly keyframes/43 键）；API 矩阵 5 例（legacy 201 补默认/新字段 201/iri=2、size=9、wobble=-1 全 400）；分享深载入 6 新参数逐值还原；Z 撤销回深载入前；PNG 快照 1.7MB；保存+封面近似无异常→删除归零；A/B 对比进出干净；390/1440 零溢出；0 console error；VLM 三连实证（虹彩「沿整个边框包括圆角环绕分布」/四芒星「类似钻石或星尘闪烁」/果冻「四个角圆润程度各不相同」）
+- 提交 73d6b43 推送 → CI run 38068300727 四门禁全绿 → #103/#104/#105 自动关闭 + 验证报告回帖 → Project 三条目 Done（scripts/set-project-status.sh，需 GITHUB_TOKEN 环境变量）
+
+Stage Summary:
+- 第十四阶段三里程碑闭环：薄膜虹彩（光源联动的光谱边缘）/ 星芒粒子（双种子交替闪烁）/ 果冻形变（整栈 border-radius blob 呼吸）
+- QA 冒烟无新 bug + 1 个实施中设计缺陷即修（isMotionConfig 联锁）——「徽章语义=看得见的动效」
+- 关键决策：①虹彩导出与 rim 共用 ::before（多背景层叠，rim 保持顶层的锐利高光）；②闪烁不导出（每层 opacity 无法在共享 background 栈独立动画）；③果冻变量挂 host 继承（一次声明整栈同步）+ 4+4 角全形式 keyframes（保证插值）；④sparkleTwinkle 默认 0.45 但 isMotionConfig 联锁 sparkle 开关（默认即闪烁但徽章不误标）
+- 沉淀陷阱：①GitHub REST issue id 不是 GraphQL 节点 id（addProjectV2ItemById 需先 GraphQL 查 issue node id）；②tsc 不拦截「使用先于 const 声明」的运行时 TDZ（motionSpeed 案例——浏览器实测才暴露）；③radix Tabs 的 eval click 无效需真实 mousedown（老陷阱第 N 次重演——保存按钮在非激活 tabpanel 中 NOT_FOUND 时先查 tab data-state）；④V 快捷键是 toggle——reload 恢复画廊偏好后再按 V 是切回列表
+- GitHub 产物：repo 推进至 73d6b43（CI 四门禁全绿）、issues #103-#105 闭环（报告回帖）、Project 三条目 Done、PR #364 待审（正常等待）
+
+未解决/风险与下一步建议:
+- PR #364 仍待 Ultra-Guru 维护者评审（正常等待，无新评论）
+- 果冻形变期间位移贴图仍按基础 cornerRadius 烘焙（亚像素失配被 rim 模糊掩盖，已注释在案——如需彻底方案可让 bake effect 依赖动画相位，成本过高暂不做）
+- 星芒闪烁的 CSS 导出为静态（引擎专属裁决已记录；若未来导出「交互 demo 页」可一并考虑）
+- 下轮候选：①虹彩的动态流动（rimFlow 式 conic 角度扫动，与高光流动复合成「油膜流转」）；②星芒颜色参数化（当前固定白色，可开放金/彩虹模式）；③果冻形变的拖拽联动（拖拽释放时触发一次 wobble 衰减——framer motion 弹性与 blob 形变复合）；④第十轮深度检查（覆盖 Phase 12+13+14 新增约 1300 行——连续三阶段未做深度检查，按节奏应优先）；⑤快捷键自定义面板
