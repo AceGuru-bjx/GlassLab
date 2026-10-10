@@ -278,3 +278,38 @@ Stage Summary:
 - 依冲突裁决规则维持既有实现：GIF89a 魔数文本接受（#60 设计范围）、stale JWT 写入降级游客（Phase 3 设计）、徽章/chips 仅登录态（M2 设计）
 - 沉淀陷阱：①find --name 子串匹配会命中同名前缀 tab（「我的」→「我的预设」）， chips 断言必须 data-testid；②Radix Tabs 非激活 tabpanel 整体卸载，跨 tab 探针前必须显式切 tab；③CDP 键盘通道会间歇丢键（60 连按仅部分生效、keydown 到达但值不变），对照指针路径可排除应用回归；④agent-browser open 同 origin hash-only URL 不重载页面，深载入断言需 about:blank 中转；⑤hook URL.createObjectURL 是捕获下载产物的可靠手段（1781KB PNG/349B JSON 逐字节可读）
 - GitHub 产物：issues #68–#72 全闭环（报告回帖+Project Done）、repo 无新提交（0 bug 无代码变更）、CI 无触发
+
+---
+Task ID: 13
+Agent: Z.ai Code (main agent)
+Task: 第五轮全面深度检查——五批检查（issues #73–#77）+ bug #81 修复 + kyant0 引擎 7-tap 四极色散对齐（#78）+ 样式库 34 款（#79）+ 向 Ultra-Guru/Android-Guru-Agent 提交 vendored backdrop 同步 PR（#80）
+
+Work Log:
+- 沙箱重置恢复：硬同步 origin/main（467d868）→ 重建 .env（DATABASE_URL 绝对路径 + NEXTAUTH_SECRET）→ bun install 补 next-auth → db push 建库 → .zscripts/dev.sh 托管启动（200）
+- 调研上游 Kyant0/AndroidLiquidGlass（android 分支，4115 stars，Apache-2.0）：拉取 Shaders.kt/Lens.kt/DrawBackdropModifier.kt 全文，发现上游色散已从旧模型演进为 **7-tap 四极色散**（quadrupolar dispersionIntensity = x·y/(hx·hy)，7 波长采样 + 通道权重表 R=(红+橙+黄)/3.5+紫/7 等，各列和恰为 1）
+- 调研 PR 目标 Ultra-Guru/Android-Guru-Agent：已 vendor com.kyant.backdrop v1（含 7-tap 色散 shader 但 DefaultHighlight 落后）；锁定 Compose BOM 2024.12.01（1.7.6）；app 代码只用 HighlightStyle.Plain（Default 零调用点）
+- GitHub Project v2「第一阶段全面深度检查 · GlassLab」建 8 任务：#73-#77 五批检查 + #78 引擎对齐 + #79 样式扩展 + #80 PR 交付（全部置 Todo）
+- 批 1（#73 引擎核心，0 缺陷）：SDF/circleMap/gradRadius 逐式对上游核验；withAlpha/isDarkColor 边界（3/6 hex 精确 rgba、color-mix、transparent）；cover/snapshot 4× 比例一致（blur 0.75→3、radius 0.6→2.4）；export JSON 字面量（#54 保持）；浏览器实证 3 滤镜×3 feImage×9 feDisp、水晶棱镜 firstScale=119.7=42×2×(1+0.85/2) 精确吻合 3-tap 公式——色散代差定性为 #78 优化范围而非缺陷
+- 批 2（#74 API/数据/认证，1 缺陷）：curl 13 例边界矩阵中发现 **#81**——GET /api/presets/[id] 缺 id 形状守卫（DELETE/PATCH 有 400 守卫，GET 短 id 得 404 且超长 id 无上界直入 SQLite）；按流程先建 issue 定证（修复前 short→404/七例对照），再修复（镜像守卫），修复后 short→400 矩阵复测
+- 批 3（#75 主舞台 2043 行，0 缺陷）：撤销栈 ref 镜像/checkpoint 时序、savedFetchSeq 代际（#56）、对比双背景副本+clipPath 隔离、删除在台背景回退、#62 键盘路径 600ms 窗口——全保持
+- 批 4（#76 周边组件，0 缺陷）：auth-dialog 错误路径/焦点管理、demo-card 水合防护（null+rAF）、.glass-range 活引用（#64 裁决维持）；观察项：layout.tsx metadata「24 种」与实际 26 漂移
+- 批 5（#77 构建/CI/部署，0 缺陷）：CI 四门禁与代码同步、BUN 1.3.14 对齐、tar 规避 upload-artifact v4 点目录、DATABASE_URL 绝对路径纪律、README 兼容矩阵与 supportsSvgBackdrop 一致
+- #81 修复提交 4367bbd → CI run 38053606267 全绿 → 带证据关闭；五批报告回帖关闭 #73-#77 → Project 全 Done
+- #78 引擎对齐（5b1ec2a，CI 38054438849 全绿）：
+  - displacement-map.ts：单循环双场烘焙——base(R/G=d·grad) + quad(R/G=四极项·d·grad)，双 PNG 均 alpha=255 防预乘解码扭曲；renderDisplacementMap → renderDisplacementMaps
+  - liquid-glass.tsx：SPECTRAL_TAPS 常量表（7 波长 t 值 + 通道权重矩阵），滤镜链 = 基准位移一次 → 每 tap 位移(quad, scale=2·refraction·k·t) + feColorMatrix 权重 → 6× feComposite(arithmetic k2=k3=1) 累加 → blur → saturate；绿 tap(t=0) 直接读 base 省一 pass；dispersion≤0.01 单 pass 回退保持
+  - 验证：tap scales DOM 精确（56/±19.6/±13.07/±6.53 = 2·28·k·t）；**VLM 视觉实证四极签名**（k=1.0 四角对角线色彩分离+轴线干净+中央无污染；k=0.85 品红/青对角分布）；滑杆跨 0.01 阈值链切换（18↔0 feComposite）；Ctrl+Z 无回归；0 console error；390px 无溢出
+  - RANDOM_RANGES 色散 [0,0.5]→[0,0.85]（四极场角落局域化，上游以布尔全开运行）
+- #79 样式扩展（同提交）：26→34 款（经典 6/材质 10/光影 9/创意 9）——液态通知条/黑曜面板/蔷薇石英/深海之窗/**四极棱镜**(7-tap 展示款)/月长石/水银液滴/薄荷硬糖；34 id 唯一且全在 zod 区间；metadata 计数改 PRESETS.length 动态派生（永久修复批4观察项）；Header/Footer 第七阶段文案
+- #80 PR 交付：clone AGA → 上游/vendored 全文件 diff 定位 8 处差异 → 有意仅同步算法性的 2 处（Shaders.kt 彩色 DefaultHighlight + HighlightStyle.kt Default color 参数化），保留本仓适配（@Language 移除/K2 context receiver 改写/Compose 1.7.6 裁剪），不同步 Lens.kt（需外部 com.kyant:shapes）与 InverseLayerScope（需 Compose 1.8）并在 PR 说明；deprecated intensity 桥接构造器保源兼容 → 分支 sync/kyant-backdrop-colored-highlight → **PR #364**（https://github.com/Ultra-Guru/Android-Guru-Agent/pull/364）
+- 实施中失误即改：误提交脚手架残留 src/app/api/route.ts（git rm --cached + gitignore + amend）；MultiEdit 因 corner hint 缩进差异整批失败（Grep 定位精确缩进后单条重做）
+- 最终验证：预设应用/导出三格式（含 #54 字面量防护保持）/分享链接 about:blank 中转深载入逐值还原（30px/55% 精确）/对比模式四组件在位/保存-删除往返/数据清理至 0/dev.log 0 error 行
+- #78/#79/#80 报告回帖关闭 → Project 全 Done（9 条目：#73-#81）
+
+Stage Summary:
+- 第五轮五批检查闭环：1 真实缺陷（#81 GET id 守卫缺失）issue→修复→CI→关闭；其余批次 0 缺陷均为既有裁决保持性验证
+- kyant0 上游算法对齐完成：Web 端 7-tap 四极光谱色散全量移植（双贴图单循环烘焙 + 7 波长 SVG 滤镜链 + 上游精确权重表），VLM 视觉实证上游签名观感
+- 样式库 26→34 款；metadata 计数动态化根治漂移
+- 姊妹交付：Android-Guru-Agent PR #364（vendored backdrop 彩色高光同步，源兼容零破坏）
+- 沉淀陷阱：①MultiEdit 多条编辑对深缩进 JSX 敏感，失败后需 Grep 精确定位再单条重做；②agent-browser 无 set-viewport，正确命令是 `set viewport <w> <h>`；③radix Tabs 语义定位 name 需全名且需可信输入（snapshot ref 点击可靠）；④agent-browser click 不支持 --coordinates，鼠标级拖拽用 `mouse move/down/up` 序列；⑤分享链接深载入测试需 about:blank 中转（hash-only 同源不重载）
+- GitHub 产物：issues #73-#81 全闭环、Project 9 条目全 Done、repo 推进至 5b1ec2a（CI 四门禁全绿）、PR #364 待审
