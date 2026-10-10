@@ -62,7 +62,15 @@ const glassConfigSchema = z.object({
   frost: z.number().min(0).max(1).default(0),
   // Phase 9 M2: texture layers — same default-0 compatibility contract.
   brushed: z.number().min(0).max(1).default(0),
+  // Phase 10 M1: brushed streak direction — default 0 (horizontal) keeps
+  // every stored row and older client payload rendering identically.
+  brushedAngle: z.number().min(0).max(360).default(0),
   bubbles: z.number().min(0).max(1).default(0),
+  // Phase 10 M2: bubble scale / count / rise — defaults 1/1/0 preserve the
+  // Phase 9 tile byte-for-byte (legacy 8-bubble layout).
+  bubbleSize: z.number().min(0.4).max(2.2).default(1),
+  bubbleDensity: z.number().min(0.3).max(2.5).default(1),
+  bubbleRise: z.number().min(0).max(1).default(0),
   edgeBlur: z.number().min(0).max(1).default(0),
   vignette: z.number().min(0).max(1).default(0),
 })

@@ -226,6 +226,18 @@
   }
 }
 
+/* Phase 10 M2: bubble rise — the seamless 200px bubble tile loops upward
+ * (a background-position shift by exactly one tile = invisible seam).
+ * Exported CSS re-emits per-layer variants (see lib/glass/export.ts). */
+@keyframes glass-bubble-rise {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 0 -200px;
+  }
+}
+
 /* Accessibility: motion is an enhancement, never a requirement (#88). */
 @media (prefers-reduced-motion: reduce) {
   [data-glass-animated] {

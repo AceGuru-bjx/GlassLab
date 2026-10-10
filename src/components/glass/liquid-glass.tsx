@@ -31,7 +31,11 @@ import {
 } from 'react'
 import { scaleColorAlpha, withAlpha } from '@/lib/glass/color'
 import { renderDisplacementMaps } from '@/lib/glass/displacement-map'
-import { brushedDataUri, bubblesDataUri } from '@/lib/glass/textures'
+import {
+  brushedDataUri,
+  bubbleRisePeriodSec,
+  bubblesDataUri,
+} from '@/lib/glass/textures'
 import type { GlassConfig } from '@/lib/glass/presets'
 
 export interface LiquidGlassProps {
@@ -250,6 +254,11 @@ function LiquidGlassImpl({
   // ---- Phase 9 M2: texture layers (intensity baked into the data-URIs) ----
   const brushed = Math.max(0, Math.min(1, config.brushed ?? 0))
   const bubbles = Math.max(0, Math.min(1, config.bubbles ?? 0))
+  // Phase 10 M1/M2: parametric textures — direction, scale, count, motion.
+  const brushedAngle = Math.max(0, Math.min(360, config.brushedAngle ?? 0))
+  const bubbleSize = Math.max(0.4, Math.min(2.2, config.bubbleSize ?? 1))
+  const bubbleDensity = Math.max(0.3, Math.min(2.5, config.bubbleDensity ?? 1))
+  const bubbleRise = Math.max(0, Math.min(1, config.bubbleRise ?? 0))
   // ---- Phase 9 M1: glow system ----
   // Multiplier semantics: final alpha = glow's own embedded alpha × glowOpacity.
   // Default 1 keeps every pre-Phase-9 preset visually identical.
@@ -536,28 +545,37 @@ function LiquidGlassImpl({
       )}
 
       {/* Phase 9 M2: brushed-metal streaks — anisotropic feTurbulence
-          data-URI tiling (zero-JS, Safari/Firefox-safe, export-identical). */}
+          data-URI tiling (zero-JS, Safari/Firefox-safe, export-identical).
+          Phase 10 M1: brushedAngle rotates the tiling grid in-pattern. */}
       {brushed > 0.01 && (
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0"
           style={{
             ...radiusStyle(),
-            backgroundImage: `url("${brushedDataUri(brushed * 0.4)}")`,
+            backgroundImage: `url("${brushedDataUri(brushed * 0.4, brushedAngle)}")`,
             backgroundSize: '240px 240px',
           }}
         />
       )}
 
-      {/* Phase 9 M2: gas bubbles — radial-gradient spheres, seamless tile */}
+      {/* Phase 9 M2: gas bubbles — radial-gradient spheres, seamless tile.
+          Phase 10 M2: size/density scale the tile; bubbleRise loops the
+          seamless 200px tile upward via a background-position animation
+          (reduced-motion disables it through [data-glass-animated]). */}
       {bubbles > 0.01 && (
         <div
           aria-hidden
+          data-glass-animated={bubbleRise > 0.01 ? '' : undefined}
           className="pointer-events-none absolute inset-0"
           style={{
             ...radiusStyle(),
-            backgroundImage: `url("${bubblesDataUri(bubbles * 0.55)}")`,
+            backgroundImage: `url("${bubblesDataUri(bubbles * 0.55, bubbleSize, bubbleDensity)}")`,
             backgroundSize: '200px 200px',
+            animation:
+              bubbleRise > 0.01
+                ? `glass-bubble-rise ${bubbleRisePeriodSec(bubbleRise)}s linear infinite`
+                : undefined,
           }}
         />
       )}

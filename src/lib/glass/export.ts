@@ -10,7 +10,7 @@
  */
 
 import { scaleColorAlpha, withAlpha } from './color'
-import { brushedDataUri, bubblesDataUri } from './textures'
+import { brushedDataUri, bubbleRisePeriodSec, bubblesDataUri } from './textures'
 import { DEFAULT_CONFIG, type GlassConfig } from './presets'
 
 function radiusPx(cornerRadius: number): string {
@@ -50,6 +50,11 @@ function cssBody(config: GlassConfig): string {
   // root element, intensity baked into each data-URI (engine-identical).
   const brushed = Math.max(0, Math.min(1, config.brushed ?? 0))
   const bubbles = Math.max(0, Math.min(1, config.bubbles ?? 0))
+  // Phase 10 M1/M2: parametric textures (direction / scale / count / rise).
+  const brushedAngle = Math.max(0, Math.min(360, config.brushedAngle ?? 0))
+  const bubbleSize = Math.max(0.4, Math.min(2.2, config.bubbleSize ?? 1))
+  const bubbleDensity = Math.max(0.3, Math.min(2.5, config.bubbleDensity ?? 1))
+  const bubbleRise = Math.max(0, Math.min(1, config.bubbleRise ?? 0))
   const bgImages: string[] = []
   const bgSizes: string[] = []
   if (frost > 0.01) {
@@ -57,11 +62,11 @@ function cssBody(config: GlassConfig): string {
     bgSizes.push('180px 180px')
   }
   if (brushed > 0.01) {
-    bgImages.push(`url("${brushedDataUri(brushed * 0.4)}")`)
+    bgImages.push(`url("${brushedDataUri(brushed * 0.4, brushedAngle)}")`)
     bgSizes.push('240px 240px')
   }
   if (bubbles > 0.01) {
-    bgImages.push(`url("${bubblesDataUri(bubbles * 0.55)}")`)
+    bgImages.push(`url("${bubblesDataUri(bubbles * 0.55, bubbleSize, bubbleDensity)}")`)
     bgSizes.push('200px 200px')
   }
   const frostBg =
@@ -85,10 +90,23 @@ function cssBody(config: GlassConfig): string {
   const hasGlow = !!(config.glow && config.glow !== 'transparent')
   // Glow breathing animates the root's full box-shadow stack (only the glow
   // alpha differs between the two keyframes) — box-shadow interpolates.
+  // Phase 10 M2: bubble rise lives on the same root element (the bubble
+  // tile is the last background-image layer), so both rules merge into a
+  // single comma-separated animation list.
+  const riseAnimated = bubbleRise > 0.01 && bubbles > 0.01
+  const rootAnimations: string[] = []
+  if (glowPulse > 0.01 && hasGlow) {
+    rootAnimations.push(
+      `glass-glow-pulse ${glowPulsePeriod}s ease-in-out infinite alternate`
+    )
+  }
+  if (riseAnimated) {
+    rootAnimations.push(
+      `glass-bubble-rise ${bubbleRisePeriodSec(bubbleRise)}s linear infinite`
+    )
+  }
   const glowAnimationRule =
-    glowPulse > 0.01 && hasGlow
-      ? `\n  animation: glass-glow-pulse ${glowPulsePeriod}s ease-in-out infinite alternate;`
-      : ''
+    rootAnimations.length > 0 ? `\n  animation: ${rootAnimations.join(', ')};` : ''
   const glowPulseKeyframes =
     glowPulse > 0.01 && hasGlow
       ? `\n\n/* 辉光呼吸（周期 ${glowPulsePeriod}s） */\n@keyframes glass-glow-pulse {\n  from { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28),\n    inset 0 -1px 0 rgba(0, 0, 0, 0.12), 0 8px 32px rgba(0, 0, 0, 0.12)${vignetteShadow},\n  0 0 ${glowSpread}px ${(glowSpread / 12).toFixed(1)}px ${scaleColorAlpha(config.glow, glowOpacity)}; }\n  to { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28),\n    inset 0 -1px 0 rgba(0, 0, 0, 0.12), 0 8px 32px rgba(0, 0, 0, 0.12)${vignetteShadow},\n  0 0 ${glowSpread}px ${(glowSpread / 12).toFixed(1)}px ${scaleColorAlpha(config.glow, glowOpacity * 0.45)}; }\n}`
@@ -105,8 +123,18 @@ function cssBody(config: GlassConfig): string {
     rimFlow > 0.01
       ? `\n\n/* 高光流动（周期 ${rimFlowPeriod}s）— @property 注册 <angle> 平滑插值 */\n@property --glass-rim-angle {\n  syntax: "<angle>";\n  initial-value: 0deg;\n  inherits: false;\n}\n@keyframes glass-rim-flow {\n  from { --glass-rim-angle: var(--glass-rim-start); }\n  to { --glass-rim-angle: calc(var(--glass-rim-start) + 360deg); }\n}`
       : ''
+  // Bubble rise: the seamless 200px tile shifts up by exactly one tile.
+  // background-position must list every background-image layer — bubbles is
+  // always the last one pushed onto the stack, the others hold still.
+  const bubbleRiseKeyframes = riseAnimated
+    ? `\n\n/* 气泡上升（周期 ${bubbleRisePeriodSec(bubbleRise)}s）— 无缝 200px 贴图循环上移 */\n@keyframes glass-bubble-rise {\n  from { background-position: ${bgImages
+        .map(() => '0 0')
+        .join(', ')}; }\n  to { background-position: ${bgImages
+        .map((_, i) => (i === bgImages.length - 1 ? '0 -200px' : '0 0'))
+        .join(', ')}; }\n}`
+    : ''
   const motionGuard =
-    glowPulse > 0.01 || rimFlow > 0.01
+    glowPulse > 0.01 || rimFlow > 0.01 || riseAnimated
       ? `\n\n@media (prefers-reduced-motion: reduce) {\n  .liquid-glass, .liquid-glass::before { animation: none !important; }\n}`
       : ''
 
@@ -140,7 +168,7 @@ function cssBody(config: GlassConfig): string {
   -webkit-mask-composite: xor;
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask-composite: exclude;
-}${edgeLayer}${glowPulseKeyframes}${rimFlowKeyframes}${motionGuard}`
+}${edgeLayer}${glowPulseKeyframes}${rimFlowKeyframes}${bubbleRiseKeyframes}${motionGuard}`
 }
 
 /** Standalone CSS export. */
@@ -237,7 +265,11 @@ export function validateConfigObject(raw: unknown): GlassConfig | null {
     'elasticity',
     'frost',
     'brushed',
+    'brushedAngle',
     'bubbles',
+    'bubbleSize',
+    'bubbleDensity',
+    'bubbleRise',
     'edgeBlur',
     'vignette',
     'glowOpacity',

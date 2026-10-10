@@ -184,7 +184,11 @@ type NumericKey = keyof Pick<
   | 'elasticity'
   | 'frost'
   | 'brushed'
+  | 'brushedAngle'
   | 'bubbles'
+  | 'bubbleSize'
+  | 'bubbleDensity'
+  | 'bubbleRise'
   | 'edgeBlur'
   | 'vignette'
   | 'glowOpacity'
@@ -217,7 +221,12 @@ const PARAM_ROWS: {
   { key: 'vignette', label: '暗角', min: 0, max: 1, step: 0.05, fmt: v => `${Math.round(v * 100)}%` },
   // ---- Phase 9 M2: texture layers ----
   { key: 'brushed', label: '拉丝纹理', min: 0, max: 1, step: 0.05, fmt: v => `${Math.round(v * 100)}%` },
+  { key: 'brushedAngle', label: '拉丝角度', min: 0, max: 360, step: 5, fmt: v => `${v}°` },
   { key: 'bubbles', label: '气泡纹理', min: 0, max: 1, step: 0.05, fmt: v => `${Math.round(v * 100)}%` },
+  // ---- Phase 10 M2: bubble dynamics ----
+  { key: 'bubbleSize', label: '气泡大小', min: 0.4, max: 2.2, step: 0.05, fmt: v => `${v.toFixed(2)}×` },
+  { key: 'bubbleDensity', label: '气泡密度', min: 0.3, max: 2.5, step: 0.05, fmt: v => `${Math.max(1, Math.round(8 * v))} 球` },
+  { key: 'bubbleRise', label: '气泡上升', min: 0, max: 1, step: 0.01, fmt: v => (v <= 0.01 ? '关' : `${(8 - 6.5 * v).toFixed(1)}s`) },
   // ---- Phase 9 M1: glow system ----
   { key: 'glowOpacity', label: '辉光强度', min: 0, max: 1, step: 0.01, fmt: v => `${Math.round(v * 100)}%` },
   { key: 'glowSpread', label: '辉光范围', min: 0, max: 60, step: 1, fmt: v => `${v}px` },
@@ -264,7 +273,10 @@ const RANDOM_RANGES: Record<NumericKey, [number, number]> = {
   elasticity: [0.1, 0.9],
   frost: [0, 0.4],
   brushed: [0, 0.45],
+  brushedAngle: [0, 360],
   bubbles: [0, 0.5],
+  bubbleSize: [0.6, 1.6],
+  bubbleDensity: [0.5, 1.8],
   edgeBlur: [0, 0.5],
   vignette: [0, 0.35],
   glowOpacity: [0.5, 1],
@@ -272,6 +284,7 @@ const RANDOM_RANGES: Record<NumericKey, [number, number]> = {
   // Motion params deliberately never randomize — animations are opt-in.
   glowPulse: [0, 0],
   rimFlow: [0, 0],
+  bubbleRise: [0, 0],
 }
 
 /** Phase 4 M3: variant jitter amplitude (±15% of the current value). */
@@ -2136,7 +2149,7 @@ export function GlassLab() {
             </a>{' '}
             (Apache-2.0)
           </span>
-          <span>第九阶段 · 辉光系统升级 / 质感纹理层 / 样式库 44 款</span>
+          <span>第十阶段 · 动态玻璃生态 / 拉丝方向 · 气泡动力学 / 样式库 50 款</span>
         </div>
       </footer>
     </div>
