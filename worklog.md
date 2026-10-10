@@ -256,3 +256,25 @@ Stage Summary:
 - 关键决策：快照复用 cover 近似渲染管线但全部尺寸参数化（4× 缩放系数）；view=mine 游客返回空集而非 400（UI 空态统一复用）；validateConfigObject 共享口径保证分享链接与文件导入行为完全一致；导入必入撤销栈（Ctrl+Z 可回退）
 - 沉淀陷阱：①agent-browser refs 在 tab 切换后全页重排，跨命令引用必失效——每次交互前 fresh snapshot；②find role --name 子串匹配会命中前缀相同按钮——语义定位必须全名精确；③此环境下 eval 合成 click 不触发 React onClick（用 __reactProps$ 直接调用可绕过并定位 handler 层问题）；④新增查询参数必须同步传入 safeParse 对象（schema 定义≠参数接线，curl 实测才能暴露）；⑤toBlob 的 revokeObjectURL 是延迟 4s 调用，断言需等足时长
 - GitHub 产物：repo 推进至 0215bde（29 commits、CI 四阶段全绿）、issues #65-#67 全闭环（报告回帖）、Project 第六阶段条目全 Done
+
+---
+Task ID: 12
+Agent: Z.ai Code (main agent)
+Task: 第四轮全面深度检查——五批用户旅程模拟（issues #68–#72），重点覆盖 Phase 6 新功能回归
+
+Work Log:
+- 前置核实：#1–#67 全 closed、main @ c43d160 与远程同步、dev server 200、gh CLI 缺失改 REST/GraphQL 直调（沿用第五阶段先例）
+- 建任务：5 批用户旅程检查 issue（#68–#72）创建并入 Project v2 置 Todo，正文固化冲突裁决规则与「高斯模糊新效果需求已删除（仅 bug 口径复核）」
+- 全检 1/5（#68 首访调参与引擎回归）：26 款预设/分类计数 4-8-7-7/6 背景逐一切换/水滴透镜参数联动/键盘滑杆 #62 保持（4 按合并 1 检查点、burst 6 按合并 2 检查点、undo 逐步至栈底 disabled、redo 逆路径）/三新效果 DOM 实装（edgeBlur 6 蒙版环 blur 19.5px=0.75×26、frost 3 feTurbulence baseFrequency 0.82、vignette 径向渐变 0.41）/lightAngle 130°→rim linear-gradient(130deg) 精确联动/+1200px 拖出钳制（弹性回弹 2s 后 rightGap=0）/生成器锁定 5 轮恒定+解锁生效+变体 50∈[48.45,65.55]+入撤销栈/390px 零溢出——0 bug
+- 全检 2/5（#69 预设管理与 Phase 6 M2 重点）：游客保存（封面 4199B）→注册 r4probe→登录保存私有→徽章 teal/neutral→视图三态 chips（mine=1/public=1/all=2）→chips 与搜索/收藏排序正交→删除同步+公共不受影响→view=mine 游客 200 空集/view=bogus 400——0 bug；关键澄清：curl 无会话只见公共是可见性设计正确行为；find --name「我的」子串匹配陷阱改 data-testid 精确定位
+- 全检 3/5（#70 认证会话与隔离）：短密码内联「至少 8」/重复注册 409 内联/非法邮箱 HTML5 typeMismatch/匿名权限矩阵 6 例（GET 私有 403、DELETE 403、PATCH 403、GET 公共 200）/stale JWT 三例降级（GET 游客视图、POST 降级游客写入=设计内、session {}）/登出登入跨会话恢复（mine 视图持久）——0 bug；关键澄清：chips 渲染于「我的预设」tab 面板内（session?.user+tab 激活双条件），探针 tab 状态混淆曾误判「chips 消失」
+- 全检 4/5（#71 媒体与对比）：python 构造合法 PNG（667B 逐字节一致+舞台自动选中+缩略图双引用）/登录上传=私有背景游客不可见（补 #70 可见性口径）/GIF89a 魔数文本被接受与 #60 记录一致（设计范围）+坏图降级优雅 0 error/删除回退渐变背景/对比键盘 ±2·Shift±10·End 95·Home 5/指针拖拽 60%→钳 5%/Select 28 选项=26+2 我的预设/对比内随机禁用/关闭 clip 残留 0/移动端 axis=y（inset 0/95% 与 5%/0 纵向 clip 几何）——0 bug
+- 全检 5/5（#72 导出全家桶 + Phase 6 M1/M3 重点）：CSS 含三新效果/React `const css = JSON.stringify` 字面量（#54）/JSON 17 键/分享链接 374 字符深载入逐值一致/**PNG 快照 hook 捕获 1781KB image/png**/**.glass.json 导出 349B**/**合法导入 EXACT_MATCH ×2（80→28、72→28）+重选同文件可用**/**导入入撤销栈（Ctrl+Z 回 80）**/非法 JSON+类型错文件拒绝零污染/390 footer 自然推底（gap=-1719 推挤非悬浮）/1440 三栏 260-628-320/全程 0 console error——0 bug
+- 数据卫生：r4probe 账号级联清理（预设+背景）、游客测试预设A 删除、stale 探测行即时清理；终态 presets/backgrounds/users 全 0、首页 200
+
+Stage Summary:
+- 第四轮全面深度检查收官：5 批用户旅程（#68–#72）全流程模拟真实用户操作，**0 真实缺陷**——Phase 6 三个新里程碑（PNG 快照/视图筛选/配置文件 I/O）与全部既有功能无回归
+- 本轮特点：连续第四轮无新代码修复需求，反映 #1–#67 闭环质量；过程疑点全部实证澄清为工具伪象或设计内行为（hash 不重载/Radix tab 卸载/CDP 丢键/find 子串匹配/curl 无会话）
+- 依冲突裁决规则维持既有实现：GIF89a 魔数文本接受（#60 设计范围）、stale JWT 写入降级游客（Phase 3 设计）、徽章/chips 仅登录态（M2 设计）
+- 沉淀陷阱：①find --name 子串匹配会命中同名前缀 tab（「我的」→「我的预设」）， chips 断言必须 data-testid；②Radix Tabs 非激活 tabpanel 整体卸载，跨 tab 探针前必须显式切 tab；③CDP 键盘通道会间歇丢键（60 连按仅部分生效、keydown 到达但值不变），对照指针路径可排除应用回归；④agent-browser open 同 origin hash-only URL 不重载页面，深载入断言需 about:blank 中转；⑤hook URL.createObjectURL 是捕获下载产物的可靠手段（1781KB PNG/349B JSON 逐字节可读）
+- GitHub 产物：issues #68–#72 全闭环（报告回帖+Project Done）、repo 无新提交（0 bug 无代码变更）、CI 无触发
