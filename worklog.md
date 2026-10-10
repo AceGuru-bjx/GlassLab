@@ -451,3 +451,32 @@ Stage Summary:
 - PR #364 仍待 Ultra-Guru 维护者评审（正常等待，无新评论）
 - lightSmoothing 的 CSS 导出不含（交互态参数，与 lightFollow 同裁决）——若未来导出「交互 demo 页」可一并考虑
 - 下轮候选：①气泡水平漂移（background-position-x 往复）与相位差参数（错落感）；②投影颜色与 tint 联动选项（一键「影子继承染色」）；③光源跟随的 WebGL 级软阴影（当前单层 box-shadow 近似）；④第八轮深度检查（覆盖 Phase 12 新增约 330 行）；⑤导出 React 组件动效 demo 页（Phase 9 遗留候选）
+
+---
+Task ID: 19
+Agent: Z.ai Code (webDevReview 定时巡检)
+Task: 巡检轮——QA 冒烟全绿（无新 bug）后自主开发第十三阶段「动效编排系统」：气泡水平漂移（#100）/ 全局动效速度（#101）/ 键盘快捷键 + 帮助面板（#102）
+
+Work Log:
+- 前置核实：worklog Task 18 闭环态；git 6b5d815 与远程同步、CI 绿（worklog 提交在跑，等待后确认 success）、0 open issue、dev server 200、PR #364 open 正常等待
+- agent-browser 全站 QA 冒烟（9 项全绿，无新 bug）：55 预设/27 滑杆/7-tap 引擎 DOM/翡翠浮影彩色投影 rgba(6,95,70)×3 回归/光源跟随平滑（正下方收敛 ~180°）/画廊 hover 预览（暖阳投影徽章 27px/42px/28% 精确）/撤销链路 31→30→28/390px 无溢出/分享深载入（reload 后逐值还原）/0 console error
+- 自主规划第十三阶段「动效编排系统」（Task 18 候选 ① 落地 + 操作效率方向）：建 #100/#101/#102 入 Project Todo
+- M1（#100）气泡水平漂移：`bubbleDrift` 0..1 默认 0；globals.css 新增 `@property --glass-drift-amp`（<length>）+ `glass-bubble-drift` keyframes（background-position-x ease-in-out alternate）；textures.ts 新增 `bubbleDriftPeriodSec`（与 rise 4:3 周期锁定——复合轨迹读作螺旋而非 Lissajous 结扣）与 `bubbleDriftAmpPx`（0..1→0..60px）；引擎气泡层双动画逗号列表（rise 拥 -y、drift 拥 -x 长轴分治）；CSS 导出三动画列表 + @property 块 + 根元素振幅规则 + rise 切 longhand（防 shorthand 互踩）+ motionGuard 扩展；isMotionConfig 加 drift 判据（动效徽章 6→8）；新预设海藻摇曳（0.65）/香槟圆舞（0.45）→ 55→57 款
+- M2（#101）全局动效速度：`motionSpeed` 0.25..2 默认 1；四动画周期统一除法（引擎 glowPulsePeriod/rimFlowPeriod/bubbleRisePeriod/bubbleDriftPeriod + CSS 导出 risePeriod/driftPeriod 同步）；滑杆 step 0.05 fmt ×；RANDOM_RANGES [1,1]
+- M3（#102）键盘快捷键：单键层 Z 撤销/Shift+Z 重做/R 随机/V 视图/C 对比/? 帮助/Esc 关闭，叠加既有 Ctrl+Z 家族；守卫三重（INPUT/TEXTAREA/SELECT/contentEditable 让位 + 修饰键组合归浏览器 + undo/redo 对比模式门控）；帮助 Dialog（radix + kbd 键帽 8 项 + 触屏说明）；工具栏 Keyboard 图标按钮 + title 快捷键提示；Header/Footer 第十三阶段文案
+- 实施即查即改 2 起：①`bubbleRisePeriodSec` 返回 string 直接除法 TS2362 → Number() 包裹；②快捷键块置于 randomizeConfig 声明前 TDZ 错误 → python 脚本整块搬移到 patch 声明前
+- E2E 验证矩阵全绿：海藻摇曳双动画并行（rise 4.8s normal + drift 6.4s alternate，振幅 39px 精确）；speed 1→1.5 引擎周期 6.4→4.3/4.8→3.2 与 CSS 导出 2.6→1.7/4.8→3.2/6.4→4.3 除法同步；快捷键 Z（27→26）/R（26→40）/V（列表↔画廊往返）/C（aria-pressed + 2 pane）/?（8 kbd 弹出）/Esc（关闭）；输入框聚焦按 R 不劫持；API 矩阵（legacy 201 补默认 0/1、speed 3 与 drift 1.5 越界 400）；分享深载入 drift 0.65 + speed 0.75 还原；CSS 导出 drift 全结构（三动画列表/@property/振幅/longhand/守卫）；390px 无溢出；动效徽章 8 款；全新会话 57 预设/29 滑杆/0 error
+- 提交 9227ac8 推送 → CI 四门禁全绿 → #100/#101/#102 报告回帖 + 自动关闭 + Project 全 Done；测试数据清理归零
+
+Stage Summary:
+- 第十三阶段三里程碑闭环：气泡螺旋轨迹（漂移 + 上升 4:3 锁定）/ 全局动效节奏（四动画统一时间缩放）/ 键盘快捷键系统（含帮助面板）
+- GlassConfig 参数 38→40（+bubbleDrift/motionSpeed），全部默认值后向兼容（drift 0 = 字节级不变；speed 1 = 周期除 1 恒等）
+- 样式库 55→57 款（创意 +2，动效徽章 6→8）；GitHub issue #100–#102 全闭环、repo 推进至 9227ac8（CI 四门禁全绿）
+- 关键决策：①drift 周期与 rise 走 4:3 锁定（独立节拍产生 Lissajous 结扣——读作乱抖而非螺旋）；②振幅走注册自定义属性而非参数化 keyframes（引擎/导出同名共享、动态改幅免重建）；③rise+drift 双轴分治用 longhand（shorthand background-position 会互踩）；④快捷键单键层与修饰键层分流（修饰组合归浏览器，裸键归应用）
+- 沉淀陷阱：①辅助函数返回 string（bubbleRisePeriodSec 的 toFixed）参与算术前必须 Number() 包裹——tsc 会拦但易漏；②快捷键/计时器块引用后声明的 useCallback 时注意 TDZ——块搬移比改函数声明顺序更安全；③agent-browser press 对 `?` 直接支持（Shift+Slash 备用路径无需）；④HMR 全量重载期间 errors 缓冲出现空 ✗ 条目（无消息体）——全新会话复测才是权威
+- GitHub 产物：issues #100-#102 全闭环（报告回帖）、Project 三条目 Done、repo 推进至 9227ac8、PR #364 待审（正常等待）
+
+未解决/风险与下一步建议:
+- PR #364 仍待 Ultra-Guru 维护者评审（正常等待，无新评论）
+- 快捷键 help Dialog 的移动端价值有限（触屏无键盘）——已有触屏说明文案，可考虑下次巡检验证 390px 下 Dialog 布局
+- 下轮候选：①第九轮深度检查（覆盖 Phase 12+13 新增约 670 行——连续两阶段未做深度检查，按节奏应优先）；②气泡漂移与光源联动（漂移方向跟随 lightAngle）；③快捷键自定义面板（用户重映射）；④导出 React 组件的动效 demo 页（Phase 9 遗留候选）；⑤辉光呼吸与 rimFlow 的相位差参数
