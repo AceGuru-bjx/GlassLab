@@ -313,3 +313,28 @@ Stage Summary:
 - 姊妹交付：Android-Guru-Agent PR #364（vendored backdrop 彩色高光同步，源兼容零破坏）
 - 沉淀陷阱：①MultiEdit 多条编辑对深缩进 JSX 敏感，失败后需 Grep 精确定位再单条重做；②agent-browser 无 set-viewport，正确命令是 `set viewport <w> <h>`；③radix Tabs 语义定位 name 需全名且需可信输入（snapshot ref 点击可靠）；④agent-browser click 不支持 --coordinates，鼠标级拖拽用 `mouse move/down/up` 序列；⑤分享链接深载入测试需 about:blank 中转（hash-only 同源不重载）
 - GitHub 产物：issues #73-#81 全闭环、Project 9 条目全 Done、repo 推进至 5b1ec2a（CI 四门禁全绿）、PR #364 待审
+
+---
+Task ID: 14
+Agent: Z.ai Code (webDevReview 定时巡检)
+Task: 15 分钟巡检轮——QA 烟雾测试全绿后自主开发第八阶段：彩色菲涅尔高光 highlightColor（#82）/ 色彩与光效控制台（#83）/ 4 款彩色高光预设 38 款（#84）+ CI 拦截缺陷 #85 修复
+
+Work Log:
+- 前置核实：worklog Task 13 闭环态；服务器 200、CI@ff0f8d0 绿、PR #364 open 无评论、浏览器 34 预设 + 7-tap 引擎 DOM（21 feDisp/18 feComposite）在位、0 error——项目稳定，转入功能开发
+- 自主规划 Phase 8「彩色光效系统」：两大空白——① rim 高光硬编码白色（刚给 Android 端 PR #364 带去彩色高光，Web 端应对齐）；② tint/glow/tintOpacity 无任何用户编辑入口。建 #82/#83/#84 入 Project Todo
+- M1（#82）highlightColor 全链路：GlassConfig + 默认 #ffffff；liquid-glass rim 五档 withAlpha(highlightColor,·)；API zod colorField(32).default（旧客户端 201/非法色 400 双验证）；export.ts 校验+CSS/React 导出；cover/snapshot 菲涅尔描边取色
+- M2（#83）色彩控制台：color.ts 新增 toHexColor()（canvas 参考解析任意白名单色→hex，防御 undefined）；ConfigPanel 三色板（pointerDown 检查点与滑杆同语义）+ 辉光 withAlpha(hex,0.32) 合成 + 一键关闭辉光（aria-pressed）；tintOpacity 入 PARAM_ROWS/RANDOM_RANGES
+- M3（#84）4 款彩色高光预设：鎏金辉光(#fbbf24)/极光边缘(#5eead4)/玫瑰晨光(#fda4af)/青焰边缘(#22d3ee)——34→38（7/11/10/10）
+- 过程缺陷两起即查即改：①编辑中误留 `onDarkContentChange={undefined as never}` 无效 prop（即时移除）；②agent-browser errors 缓冲出现 toHexColor TypeError——全新会话复测 0 错误，定性 HMR 中间态残留（所有配置入口均 DEFAULT_CONFIG 合并），仍为 toHexColor 加了 undefined 防御（纵深加固）
+- **CI 拦截（#85）**：5298d55 typecheck 失败——环境自动提交 3749680（UUID 消息）把脚手架残留 tailwind.config.ts 带入仓库（import 未声明的 tailwindcss-animate；本地 node_modules 残留旧包致假阴性，CI 干净安装暴露 TS2307）；该文件零引用（Tailwind 4 CSS-first）→ 按 issue→修复→CI 流程：#85 建档 → git rm → 81d9eff → **CI 全绿**
+- 验证矩阵：取金色→rim rgba(251,191,36,·) 精确档位；辉光取青→box-shadow rgba(34,211,238,0.32)；关闭辉光→图层移除+可撤销1步→Ctrl+Z 逐字节恢复；预设 chip/rim/glow 三联动；DB 往返 highlightColor 落库；分享链接深载入金色 rim 还原；VLM 确认「边缘呈暖金色/琥珀色高光而非纯白色」；390px 无溢出；全新会话 0 console error
+
+Stage Summary:
+- 第八阶段三里程碑闭环：彩色菲涅尔高光引擎参数（双端对齐 PR #364）/ 色彩与光效控制台（颜色首次可编辑）/ 样式库 38 款
+- 1 个 CI 门禁缺陷（#85 环境残留混入）按流程独立建档修复，81d9eff 全绿
+- 沉淀陷阱：**环境自动提交（UUID 消息、Z User 作者）会捕获沙箱未跟踪文件入仓库**——本地 node_modules 残留包会掩盖未声明依赖，tsc 假阴性只能靠 CI 干净安装暴露；后续每轮提交前需 `git status` 核对无陌生未跟踪文件混入
+- GitHub 产物：issues #82-#85 全闭环、Project 全 Done、repo 推进至 81d9eff（CI 四门禁全绿）
+
+未解决/风险与下一步建议：
+- PR #364 仍待 Ultra-Guru 维护者评审（无评论，属正常等待）
+- 下轮候选：①辉光强度独立参数（glowOpacity，现固定 0.32 alpha）；②拉丝/气泡等新纹理层；③导出 CSS 的 edgeBlur 方案（Phase 5 遗留）；④高光色与 lightAngle 的联动预设动画
