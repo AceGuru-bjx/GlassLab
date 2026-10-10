@@ -56,6 +56,9 @@ const glassConfigSchema = z.object({
   // Phase 5 layered effects — defaults keep pre-Phase-5 payloads (older
   // clients and stored rows) valid instead of 400/corrupt.
   frost: z.number().min(0).max(1).default(0),
+  // Phase 9 M2: texture layers — same default-0 compatibility contract.
+  brushed: z.number().min(0).max(1).default(0),
+  bubbles: z.number().min(0).max(1).default(0),
   edgeBlur: z.number().min(0).max(1).default(0),
   vignette: z.number().min(0).max(1).default(0),
 })

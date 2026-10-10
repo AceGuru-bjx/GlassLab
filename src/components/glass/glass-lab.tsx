@@ -183,6 +183,8 @@ type NumericKey = keyof Pick<
   | 'tintOpacity'
   | 'elasticity'
   | 'frost'
+  | 'brushed'
+  | 'bubbles'
   | 'edgeBlur'
   | 'vignette'
   | 'glowOpacity'
@@ -211,6 +213,9 @@ const PARAM_ROWS: {
   { key: 'edgeBlur', label: '边缘高斯弥散', min: 0, max: 1, step: 0.05, fmt: v => `${Math.round(v * 100)}%` },
   { key: 'frost', label: '磨砂噪点', min: 0, max: 1, step: 0.05, fmt: v => `${Math.round(v * 100)}%` },
   { key: 'vignette', label: '暗角', min: 0, max: 1, step: 0.05, fmt: v => `${Math.round(v * 100)}%` },
+  // ---- Phase 9 M2: texture layers ----
+  { key: 'brushed', label: '拉丝纹理', min: 0, max: 1, step: 0.05, fmt: v => `${Math.round(v * 100)}%` },
+  { key: 'bubbles', label: '气泡纹理', min: 0, max: 1, step: 0.05, fmt: v => `${Math.round(v * 100)}%` },
   // ---- Phase 9 M1: glow system ----
   { key: 'glowOpacity', label: '辉光强度', min: 0, max: 1, step: 0.01, fmt: v => `${Math.round(v * 100)}%` },
   { key: 'glowSpread', label: '辉光范围', min: 0, max: 60, step: 1, fmt: v => `${v}px` },
@@ -253,6 +258,8 @@ const RANDOM_RANGES: Record<NumericKey, [number, number]> = {
   tintOpacity: [0.05, 0.35],
   elasticity: [0.1, 0.9],
   frost: [0, 0.4],
+  brushed: [0, 0.45],
+  bubbles: [0, 0.5],
   edgeBlur: [0, 0.5],
   vignette: [0, 0.35],
   glowOpacity: [0.5, 1],

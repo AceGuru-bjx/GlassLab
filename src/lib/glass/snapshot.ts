@@ -13,6 +13,7 @@
 
 import type { GlassConfig } from './presets'
 import { scaleColorAlpha, withAlpha } from './color'
+import { drawTextureApproximations } from './textures'
 
 export interface SnapshotBackgroundSpec {
   /** image source (built-in wallpaper path or uploaded background raw URL) */
@@ -178,6 +179,9 @@ export async function generateGlassSnapshot(
       ctx.fillStyle = 'rgba(15, 23, 42, 0.30)'
       ctx.fillRect(x - 16, y - 16, w + 32, h + 32)
     }
+
+    // Phase 9 M2: brushed streaks / bubbles approximations
+    drawTextureApproximations(ctx, { x, y, w, h }, config)
 
     // vignette approximation (radial corner darkening)
     const vg = Math.max(0, Math.min(1, config.vignette ?? 0))

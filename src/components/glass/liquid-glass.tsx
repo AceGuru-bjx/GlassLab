@@ -31,6 +31,7 @@ import {
 } from 'react'
 import { scaleColorAlpha, withAlpha } from '@/lib/glass/color'
 import { renderDisplacementMaps } from '@/lib/glass/displacement-map'
+import { brushedDataUri, bubblesDataUri } from '@/lib/glass/textures'
 import type { GlassConfig } from '@/lib/glass/presets'
 
 export interface LiquidGlassProps {
@@ -246,6 +247,9 @@ function LiquidGlassImpl({
   const frost = Math.max(0, Math.min(1, config.frost ?? 0))
   const edgeBlur = Math.max(0, Math.min(1, config.edgeBlur ?? 0))
   const vignette = Math.max(0, Math.min(1, config.vignette ?? 0))
+  // ---- Phase 9 M2: texture layers (intensity baked into the data-URIs) ----
+  const brushed = Math.max(0, Math.min(1, config.brushed ?? 0))
+  const bubbles = Math.max(0, Math.min(1, config.bubbles ?? 0))
   // ---- Phase 9 M1: glow system ----
   // Multiplier semantics: final alpha = glow's own embedded alpha × glowOpacity.
   // Default 1 keeps every pre-Phase-9 preset visually identical.
@@ -500,6 +504,33 @@ function LiquidGlassImpl({
             ...radiusStyle(),
             filter: `url(#${noiseId})`,
             opacity: (frost * 0.5).toFixed(3),
+          }}
+        />
+      )}
+
+      {/* Phase 9 M2: brushed-metal streaks — anisotropic feTurbulence
+          data-URI tiling (zero-JS, Safari/Firefox-safe, export-identical). */}
+      {brushed > 0.01 && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            ...radiusStyle(),
+            backgroundImage: `url("${brushedDataUri(brushed * 0.4)}")`,
+            backgroundSize: '240px 240px',
+          }}
+        />
+      )}
+
+      {/* Phase 9 M2: gas bubbles — radial-gradient spheres, seamless tile */}
+      {bubbles > 0.01 && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            ...radiusStyle(),
+            backgroundImage: `url("${bubblesDataUri(bubbles * 0.55)}")`,
+            backgroundSize: '200px 200px',
           }}
         />
       )}

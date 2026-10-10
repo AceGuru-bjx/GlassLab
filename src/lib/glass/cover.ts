@@ -13,6 +13,7 @@
 
 import type { GlassConfig } from './presets'
 import { scaleColorAlpha, withAlpha } from './color'
+import { drawTextureApproximations } from './textures'
 
 export interface CoverBackgroundSpec {
   /** image source (built-in wallpaper path or uploaded background raw URL) */
@@ -153,6 +154,9 @@ export async function generateGlassCover(
       ctx.fillStyle = 'rgba(15, 23, 42, 0.30)'
       ctx.fillRect(x - 4, y - 4, w + 8, h + 8)
     }
+
+    // Phase 9 M2: brushed streaks / bubbles approximations
+    drawTextureApproximations(ctx, { x, y, w, h }, config)
 
     // Phase 5 vignette approximation (radial corner darkening).
     const vg = Math.max(0, Math.min(1, config.vignette ?? 0))

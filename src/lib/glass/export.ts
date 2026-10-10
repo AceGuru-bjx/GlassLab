@@ -10,6 +10,7 @@
  */
 
 import { scaleColorAlpha, withAlpha } from './color'
+import { brushedDataUri, bubblesDataUri } from './textures'
 import { DEFAULT_CONFIG, type GlassConfig } from './presets'
 
 function radiusPx(cornerRadius: number): string {
@@ -45,9 +46,27 @@ function cssBody(config: GlassConfig): string {
   // ring. The grain intensity is baked into the SVG's feColorMatrix alpha
   // row (the root cannot take ::after's `opacity` without dimming content).
   const frostGrain = frost > 0.01 ? (0.34 * frost * 0.5).toFixed(4) : '0'
+  // Phase 9 M2: texture layers stack as additional background-images on the
+  // root element, intensity baked into each data-URI (engine-identical).
+  const brushed = Math.max(0, Math.min(1, config.brushed ?? 0))
+  const bubbles = Math.max(0, Math.min(1, config.bubbles ?? 0))
+  const bgImages: string[] = []
+  const bgSizes: string[] = []
+  if (frost > 0.01) {
+    bgImages.push(`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 ${frostGrain} ${frostGrain} ${frostGrain} 0 0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E")`)
+    bgSizes.push('180px 180px')
+  }
+  if (brushed > 0.01) {
+    bgImages.push(`url("${brushedDataUri(brushed * 0.4)}")`)
+    bgSizes.push('240px 240px')
+  }
+  if (bubbles > 0.01) {
+    bgImages.push(`url("${bubblesDataUri(bubbles * 0.55)}")`)
+    bgSizes.push('200px 200px')
+  }
   const frostBg =
-    frost > 0.01
-      ? `\n  /* 磨砂噪点 ${Math.round(frost * 100)}%（SVG feTurbulence，零 JS） */\n  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 ${frostGrain} ${frostGrain} ${frostGrain} 0 0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");\n  background-size: 180px 180px;`
+    bgImages.length > 0
+      ? `\n  /* 叠层纹理（SVG data-URI，零 JS） */\n  background-image: ${bgImages.join(', ')};\n  background-size: ${bgSizes.join(', ')};`
       : ''
   // Phase 9 (closing the Phase 5 legacy gap): edge-blur ring — a masked
   // backdrop-blur band over the outer edge, center stays crisp. Pure CSS.
@@ -184,6 +203,8 @@ export function validateConfigObject(raw: unknown): GlassConfig | null {
     'tintOpacity',
     'elasticity',
     'frost',
+    'brushed',
+    'bubbles',
     'edgeBlur',
     'vignette',
     'glowOpacity',
