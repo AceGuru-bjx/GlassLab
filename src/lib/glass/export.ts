@@ -112,11 +112,18 @@ function cssBody(config: GlassConfig): string {
   // Phase 14 M2: sparkle glints — both seed constellations stack statically
   // (the live twinkle is engine-only: per-layer opacity cannot animate on a
   // shared background stack without dimming the content).
+  // Phase 15 M2: sparkleColor tints the stars at bake time.
   const sparkle = Math.max(0, Math.min(1, config.sparkle ?? 0))
   const sparkleSize = Math.max(0.5, Math.min(2, config.sparkleSize ?? 1))
+  const sparkleColor =
+    config.sparkleColor === 'gold' || config.sparkleColor === 'rainbow'
+      ? config.sparkleColor
+      : 'white'
   if (sparkle > 0.01) {
     for (const seed of [11, 47]) {
-      bgImages.push(`url("${sparkleDataUri(sparkle * 0.9, sparkleSize, seed)}")`)
+      bgImages.push(
+        `url("${sparkleDataUri(sparkle * 0.9, sparkleSize, seed, sparkleColor)}")`
+      )
       bgSizes.push('220px 220px')
     }
   }
@@ -185,11 +192,6 @@ function cssBody(config: GlassConfig): string {
     glowPulse > 0.01 && hasGlow
       ? `\n\n/* 辉光呼吸（周期 ${glowPulsePeriod}s）— 两态均携带完整投影栈（含方向性投影） */\n@keyframes glass-glow-pulse {\n  from { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28),\n    inset 0 -1px 0 rgba(0, 0, 0, 0.12), 0 8px 32px rgba(0, 0, 0, 0.12)${vignetteShadow}${castShadow},\n  0 0 ${glowSpread}px ${(glowSpread / 12).toFixed(1)}px ${scaleColorAlpha(config.glow, glowOpacity)}; }\n  to { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28),\n    inset 0 -1px 0 rgba(0, 0, 0, 0.12), 0 8px 32px rgba(0, 0, 0, 0.12)${vignetteShadow}${castShadow},\n  0 0 ${glowSpread}px ${(glowSpread / 12).toFixed(1)}px ${scaleColorAlpha(config.glow, glowOpacity * 0.45)}; }\n}`
       : ''
-  const rimFlowRule =
-    rimFlow > 0.01
-      ? `\n  --glass-rim-start: ${rimAngleDeg}deg;\n  --glass-rim-angle: ${rimAngleDeg}deg;\n  animation: glass-rim-flow ${rimFlowPeriod}s linear infinite;`
-      : ''
-  const rimGradientAngle = rimFlow > 0.01 ? 'var(--glass-rim-angle)' : `${config.lightAngle}deg`
   // ---- Phase 14 M1: iridescence joins ::before as a background layer ----
   // The rim gradient stays the top layer (the sharper highlight), the
   // spectral conic sheen fills the wider band beneath it. When off, the
@@ -198,7 +200,19 @@ function cssBody(config: GlassConfig): string {
   const iridescenceWidth = Math.max(2, Math.min(12, config.iridescenceWidth ?? 5))
   const iriOn = iridescence > 0.01
   const iriA = (rgb: string, f: number) => `rgba(${rgb}, ${(iridescence * f).toFixed(3)})`
-  const iriConic = `conic-gradient(from ${rimAngleDeg}deg,
+  // Phase 15 M1: iridescent sheen flow — the conic from-angle sweeps a full
+  // turn on its own registered <angle> var, so it composes with rim flow on
+  // the same ::before element as a comma-list (independent channels).
+  // Declared BEFORE iriConic (TDZ: the template literal below reads it).
+  const iriFlow = Math.max(0, Math.min(1, config.iriFlow ?? 0))
+  const iriFlowPeriod = ((7 - 5 * iriFlow) / motionSpeed).toFixed(1)
+  const iriFlowAnimated = iriFlow > 0.01 && iriOn
+  // The animated var carries its own unit — the conic interpolates the
+  // from-angle through it (rim-flow pattern; no 'deg' suffix on the var).
+  const iriConicAngle = iriFlowAnimated
+    ? 'var(--glass-iri-angle)'
+    : `${rimAngleDeg}deg`
+  const iriConic = `conic-gradient(from ${iriConicAngle},
     ${iriA('255, 130, 130', 0.5)} 0deg,
     ${iriA('255, 200, 100', 0.55)} 45deg,
     ${iriA('255, 240, 140', 0.5)} 90deg,
@@ -208,10 +222,14 @@ function cssBody(config: GlassConfig): string {
     ${iriA('220, 145, 255', 0.5)} 270deg,
     ${iriA('255, 130, 200', 0.45)} 315deg,
     ${iriA('255, 130, 130', 0.5)} 360deg)`
+  const rimGradientAngle = rimFlow > 0.01 ? 'var(--glass-rim-angle)' : `${config.lightAngle}deg`
   const rimFlowKeyframes =
     rimFlow > 0.01
       ? `\n\n/* 高光流动（周期 ${rimFlowPeriod}s）— @property 注册 <angle> 平滑插值 */\n@property --glass-rim-angle {\n  syntax: "<angle>";\n  initial-value: 0deg;\n  inherits: false;\n}\n@keyframes glass-rim-flow {\n  from { --glass-rim-angle: var(--glass-rim-start); }\n  to { --glass-rim-angle: calc(var(--glass-rim-start) + 360deg); }\n}`
       : ''
+  const iriFlowKeyframes = iriFlowAnimated
+    ? `\n\n/* 虹彩流动（周期 ${iriFlowPeriod}s）— 光谱带 360° 扫动，与高光流动独立通道复合 */\n@property --glass-iri-angle {\n  syntax: "<angle>";\n  initial-value: 0deg;\n  inherits: false;\n}\n@keyframes glass-iri-flow {\n  from { --glass-iri-angle: var(--glass-iri-start); }\n  to { --glass-iri-angle: calc(var(--glass-iri-start) + 360deg); }\n}`
+    : ''
   // Bubble rise: the seamless 200px tile shifts up by exactly one tile.
   // background-position must list every background-image layer — the lists
   // below key off bubbleLayerIndex (sparkle seeds push after the bubbles, so
@@ -257,9 +275,30 @@ function cssBody(config: GlassConfig): string {
     ? `\n\n/* 果冻形变（周期 ${wobblePeriod}s，振幅 ${Math.round(wobble * 100)}%）— border-radius blob 呼吸 */\n.liquid-glass { --glass-jelly-r: ${radiusPx(config.cornerRadius)}; --glass-jelly-amp: ${wobble.toFixed(3)}; }\n@keyframes glass-jelly {\n  0%, 100% { border-radius: var(--glass-jelly-r) var(--glass-jelly-r) var(--glass-jelly-r) var(--glass-jelly-r) / var(--glass-jelly-r) var(--glass-jelly-r) var(--glass-jelly-r) var(--glass-jelly-r); }\n  25% { border-radius: calc(var(--glass-jelly-r) * (1 + 0.32 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 - 0.22 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 + 0.18 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 - 0.14 * var(--glass-jelly-amp))) / calc(var(--glass-jelly-r) * (1 + 0.32 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 - 0.22 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 + 0.18 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 - 0.14 * var(--glass-jelly-amp))); }\n  50% { border-radius: calc(var(--glass-jelly-r) * (1 - 0.18 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 + 0.28 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 - 0.1 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 + 0.22 * var(--glass-jelly-amp))) / calc(var(--glass-jelly-r) * (1 - 0.18 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 + 0.28 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 - 0.1 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 + 0.22 * var(--glass-jelly-amp))); }\n  75% { border-radius: calc(var(--glass-jelly-r) * (1 + 0.12 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 - 0.08 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 + 0.3 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 - 0.2 * var(--glass-jelly-amp))) / calc(var(--glass-jelly-r) * (1 + 0.12 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 - 0.08 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 + 0.3 * var(--glass-jelly-amp))) calc(var(--glass-jelly-r) * (1 - 0.2 * var(--glass-jelly-amp))); }\n}`
     : ''
   const motionGuard =
-    glowPulse > 0.01 || rimFlow > 0.01 || riseAnimated || driftAnimated || wobbleAnimated
+    glowPulse > 0.01 ||
+    rimFlow > 0.01 ||
+    riseAnimated ||
+    driftAnimated ||
+    wobbleAnimated ||
+    iriFlowAnimated
       ? `\n\n@media (prefers-reduced-motion: reduce) {\n  .liquid-glass, .liquid-glass::before { animation: none !important; }\n}`
       : ''
+  // Phase 15 M1: ::before may carry both the rim flow and the iridescent
+  // sweep — independent <angle> channels, merged as a comma list (#106
+  // pattern; the vars for each animation live on the same declaration).
+  const beforeAnimations = [
+    rimFlow > 0.01 ? `glass-rim-flow ${rimFlowPeriod}s linear infinite` : '',
+    iriFlowAnimated ? `glass-iri-flow ${iriFlowPeriod}s linear infinite` : '',
+  ]
+    .filter(Boolean)
+    .join(', ')
+  const beforeFlowRule = beforeAnimations
+    ? `\n  ${rimFlow > 0.01 ? `--glass-rim-start: ${rimAngleDeg}deg;\n  --glass-rim-angle: ${rimAngleDeg}deg;` : ''}${
+        iriFlowAnimated
+          ? `${rimFlow > 0.01 ? '\n  ' : ''}--glass-iri-start: ${rimAngleDeg}deg;\n  --glass-iri-angle: ${rimAngleDeg}deg;`
+          : ''
+      }\n  animation: ${beforeAnimations};`
+    : ''
 
   return `/* 生成自 GlassLab 玻璃实验室 — https://github.com/AceGuru-bjx/GlassLab
  * 说明：blur/saturate/染色/磨砂噪点/暗角/边缘高斯弥散/辉光为纯 CSS；
@@ -293,12 +332,12 @@ function cssBody(config: GlassConfig): string {
     ${withAlpha(hlColor, 0.18 * hl)} 28%,
     ${withAlpha(hlColor, 0.02 * hl)} 50%,
     ${withAlpha(hlColor, 0.1 * hl)} 72%,
-    ${withAlpha(hlColor, 0.45 * hl)} 100%)`};${rimFlowRule}
+    ${withAlpha(hlColor, 0.45 * hl)} 100%)`};${beforeFlowRule}
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask-composite: exclude;
-}${edgeLayer}${glowPulseKeyframes}${rimFlowKeyframes}${bubbleRiseKeyframes}${bubbleDriftKeyframes}${jellyKeyframes}${motionGuard}`
+}${edgeLayer}${glowPulseKeyframes}${rimFlowKeyframes}${iriFlowKeyframes}${bubbleRiseKeyframes}${bubbleDriftKeyframes}${jellyKeyframes}${motionGuard}`
 }
 
 /** Standalone CSS export. */
@@ -420,10 +459,12 @@ export function validateConfigObject(raw: unknown): GlassConfig | null {
     'motionSpeed',
     'iridescence',
     'iridescenceWidth',
+    'iriFlow',
     'sparkle',
     'sparkleSize',
     'sparkleTwinkle',
     'wobble',
+    'dragBounce',
   ] as const
   for (const k of numKeys) {
     const v = Number(merged[k])
@@ -441,6 +482,12 @@ export function validateConfigObject(raw: unknown): GlassConfig | null {
     typeof merged.shadowColor !== 'string'
   ) {
     return null
+  }
+  // Phase 15 M2: sparkleColor is a closed enum — anything else falls back
+  // to 'white' rather than poisoning the texture baker (links from older
+  // versions carry no sparkleColor key at all).
+  if (merged.sparkleColor !== 'gold' && merged.sparkleColor !== 'rainbow') {
+    merged.sparkleColor = 'white'
   }
   return merged
 }

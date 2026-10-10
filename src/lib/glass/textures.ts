@@ -220,23 +220,51 @@ function starLayout(seed: number, size: number): Array<[number, number, number]>
   return out
 }
 
+/** Phase 15 M2: sparkle color modes — the fill color of one star at a
+ *  given alpha. 'white' stays byte-identical to Phase 14; 'gold' is a warm
+ *  gilded tone; 'rainbow' rotates the hue per star via the golden angle
+ *  (137.5° — maximum hue separation between neighbours). */
+export type SparkleColor = 'white' | 'gold' | 'rainbow'
+
+const GOLD_RGB = '255, 208, 90'
+
+function starFill(color: SparkleColor, alpha: string, starIndex: number): string {
+  if (color === 'gold') return `rgba(${GOLD_RGB},${alpha})`
+  if (color === 'rainbow') {
+    const hue = Math.round((starIndex * 137.5) % 360)
+    return `hsla(${hue}, 92%, 72%, ${alpha})`
+  }
+  return `rgba(255,255,255,${alpha})`
+}
+
+function normalizeSparkleColor(raw: unknown): SparkleColor {
+  return raw === 'gold' || raw === 'rainbow' ? raw : 'white'
+}
+
 /**
- * Sparkle glint tile (220×220, seamless) — white 4-point stars with a tiny
+ * Sparkle glint tile (220×220, seamless) — 4-point stars with a tiny
  * bright core, per-star alpha baked in. Two public seeds (11 / 47) tile the
  * glass with different constellations.
  *
  * @param alphaK overall visibility 0..1 (engine passes sparkle × 0.9)
  * @param size star scale 0.5..2 (default 1)
  * @param seed layout seed (11 or 47 — the two engine layers)
+ * @param color Phase 15 M2 color mode ('white' | 'gold' | 'rainbow')
  */
-export function sparkleDataUri(alphaK: number, size = 1, seed = 11): string {
+export function sparkleDataUri(
+  alphaK: number,
+  size = 1,
+  seed = 11,
+  color: SparkleColor = 'white'
+): string {
   const k = clamp(alphaK, 0, 1)
+  const c = normalizeSparkleColor(color)
   const rnd = lcg(seed * 7919)
   const paths = starLayout(seed, size)
-    .map(([cx, cy, len]) => {
+    .map(([cx, cy, len], i) => {
       // Per-star alpha in 0.45..1 × overall k, deterministic.
       const a = (k * (0.45 + rnd() * 0.55)).toFixed(3)
-      return `%3Cpath d='${starSvgPath(cx, cy, len)}' fill='rgba(255,255,255,${a})'/%3E`
+      return `%3Cpath d='${starSvgPath(cx, cy, len)}' fill='${starFill(c, a, i)}'/%3E`
     })
     .join('')
   return `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E${paths}%3C/svg%3E`
@@ -269,6 +297,7 @@ export function drawTextureApproximations(
     bubbleDensity?: number
     sparkle?: number
     sparkleSize?: number
+    sparkleColor?: string
   }
 ): void {
   const brushed = clamp(config.brushed ?? 0, 0, 1)
@@ -302,7 +331,11 @@ export function drawTextureApproximations(
   if (sparkle > 0.01) {
     // Phase 14 M2: both seed constellations, scaled into the card like the
     // bubble tile (220px reference). Static render of the twinkle layers.
+    // Phase 15 M2: star color mode mirrors sparkleDataUri (gold / rainbow
+    // golden-angle hues; rainbow index counts across both seeds).
     const k = sparkle * 0.9
+    const c = normalizeSparkleColor(config.sparkleColor)
+    let starIndex = 0
     ctx.save()
     const scale = Math.max(w, h) / 220
     for (const seed of [11, 47]) {
@@ -313,9 +346,10 @@ export function drawTextureApproximations(
         const cx = x + (sx / 220) * w
         const cy = y + (sy / 220) * h
         const len = slen * scale
-        ctx.fillStyle = `rgba(255,255,255,${a.toFixed(3)})`
+        ctx.fillStyle = starFill(c, a.toFixed(3), starIndex)
         starPath(ctx, cx, cy, len)
         ctx.fill()
+        starIndex++
       }
     }
     ctx.restore()

@@ -269,6 +269,24 @@
   }
 }
 
+/* Phase 15 M1: iridescent sheen flow — the spectral conic band's from-angle
+ * sweeps a full turn (registered <angle> interpolation, rim-flow pattern).
+ * Exported CSS re-emits the same name (see lib/glass/export.ts). */
+@property --glass-iri-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes glass-iri-flow {
+  from {
+    --glass-iri-angle: var(--glass-iri-start);
+  }
+  to {
+    --glass-iri-angle: calc(var(--glass-iri-start) + 360deg);
+  }
+}
+
 /* Phase 14 M3: jelly wobble — border-radius blob morph. Every keyframe uses
  * the full 4+4 corner form so interpolation is smooth; the base radius and
  * amplitude arrive through (inherited, unregistered) custom properties set

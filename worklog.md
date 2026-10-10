@@ -511,3 +511,24 @@ Stage Summary:
 - 果冻形变期间位移贴图仍按基础 cornerRadius 烘焙（亚像素失配被 rim 模糊掩盖，已注释在案——如需彻底方案可让 bake effect 依赖动画相位，成本过高暂不做）
 - 星芒闪烁的 CSS 导出为静态（引擎专属裁决已记录；若未来导出「交互 demo 页」可一并考虑）
 - 下轮候选：①虹彩的动态流动（rimFlow 式 conic 角度扫动，与高光流动复合成「油膜流转」）；②星芒颜色参数化（当前固定白色，可开放金/彩虹模式）；③果冻形变的拖拽联动（拖拽释放时触发一次 wobble 衰减——framer motion 弹性与 blob 形变复合）；④第十轮深度检查（覆盖 Phase 12+13+14 新增约 1300 行——连续三阶段未做深度检查，按节奏应优先）；⑤快捷键自定义面板
+---
+Task ID: 21 (进行中)
+Agent: Z.ai Code (main agent)
+Task: 状态评估轮——QA 冒烟全绿后执行第十轮深度检查（Phase 12+13+14 ~1300 行）：发现 4 缺陷建 #106/#107/#108 → 全部修复 → CI 绿 → 报告回帖；随后自主开发 Phase 15「流光溢彩」
+
+Work Log (深度检查部分，已完成):
+- 前置核实：worklog Task 20 闭环态；git 17d388a 同步、CI 绿、0 open issue、dev server 200
+- agent-browser QA 冒烟 11 项全绿：64 预设/35 滑杆（29+6）/21 feDisp+18 feComp/果冻 15 层 3.9s 活体半径/星芒双种子 1.8s+2.9s 半相位/虹彩 conic 8 停靠 from 315°/Z·V·? 快捷键/CSS 导出条件结构/390px 零溢出/分享深链 jelly 还原/0 error
+- 第十轮深度检查（lint+tsc 干净后逐文件审查 engine/export/globals/API）发现 4 缺陷：
+  1) #106 引擎动画覆盖：radiusStyle 注入的 jelly 被同层后置 animation 键整体替换（对象字面量后键覆盖前键）——glow 呼吸/气泡/星芒/rim 流动层丢失 jelly morph（水润果冻实测 combinedJellyPlusOther=0；导出侧 rootAnimations 列表正确=parity 缺口）
+  2) #107 reduced-motion 失守：jelly 经内联 style 注入不走 data-glass-animated 通道，实测 reduced-motion on 时 15 层仍在动画
+  3) #108 导出错层：rise 关键帧以 bgImages.length-1 定位气泡层，sparkle 后置时 -200px 落在 220px 星芒贴图（气泡不升+接缝跳变）
+  4) #108 导出上升丢失：rise+drift 同开时 rise 变 background-position-x: 0px→0px 空转（y 轴动画丢失，海藻摇曳/香槟圆舞导出只剩摇摆）；附带 drift 单值波及全部背景层（frost/brushed/sparkle 跟着横摆的 parity 缺口）
+- 修复（daa799b，3 文件 +70/-18）：引擎新增 jellyAnim+combo() 合并器——四类层改逗号动画列表（通道互斥：border-radius/opacity/background-position/自定义属性）；星芒 seed B delay 改逐动画对位 '0s, -1.7s'；宿主挂 data-glass-jelly + globals.css 守卫扩 [data-glass-jelly] > *；导出 bubbleLayerIndex 跟踪 + rise/drift 逐层列表（rise 拥 -y、drift 拥 -x），单层输出与旧版字节一致
+- 验证全绿：引擎组合实测（glow 'glass-jelly, glass-glow-pulse' 3.9s,2.9s / bubble 'glass-jelly, glass-bubble-rise' / sparkle 双种子 delay 0s,-1.7s / rim 'glass-jelly, glass-rim-flow'）；reduced-motion jelly 15→0；wobble=0 传统路径字节一致；导出 bun 矩阵 7/7；lint+tsc 干净
+- 提交 daa799b 推送 → CI 四门禁全绿 → #106/#107/#108 自动关闭 + 验证报告回帖
+
+Stage Summary (深度检查):
+- 第十轮深度检查闭环：4 缺陷（1 引擎视觉 + 1 a11y + 2 导出）全修复，issue 全闭环，repo 推进至 daa799b
+- 沉淀陷阱：①对象字面量后键覆盖前键——radiusStyle 注入 animation 后同层自带动效必须用 combo 合并；②agent-browser 的 media 模拟跨 reload 持久、set off 无效——需 close+open 全新会话（且 close 后 open 偶发 about:blank 要强制 navigate，老陷阱重演）；③hash 深链只在硬载入时生效（同页 hash 变更不重挂载不触发 effect）
+- Phase 15 规划（Task 20 候选落地）：M1 虹彩动态流动（iriFlow conic 角度扫动）/ M2 星芒颜色参数化 / M3 果冻拖拽联动（释放触发 wobble 脉冲）

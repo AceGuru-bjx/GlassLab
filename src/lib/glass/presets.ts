@@ -93,16 +93,28 @@ export interface GlassConfig {
   iridescence: number
   /** Phase 14 M1: iridescent band width in px (2..12, default 5) */
   iridescenceWidth: number
+  /** Phase 15 M1: iridescent sheen flow — the spectral conic band sweeps
+   *  360° around the edge (0 = off). Period 7s→2s, divided by motionSpeed. */
+  iriFlow: number
   /** Phase 14 M2: sparkle glints — 4-point star field scattered over the
    *  glass, two independently twinkling seeds. 0 = off. */
   sparkle: number
   /** Phase 14 M2: sparkle star scale (default 1) */
   sparkleSize: number
+  /** Phase 15 M2: sparkle color mode — 'white' (default, byte-identical
+   *  to Phase 14) / 'gold' (warm gilded glints) / 'rainbow' (per-star
+   *  golden-angle hue). */
+  sparkleColor: string
   /** Phase 14 M2: sparkle twinkle speed — 0 = static glitter, 1 = fastest */
   sparkleTwinkle: number
   /** Phase 14 M3: jelly wobble — border-radius blob morph breathing,
    *  0 = off. Amplitude and tempo both scale with it (motionSpeed applies). */
   wobble: number
+  /** Phase 15 M3: drag-release bounce — underdamped spring on the whileDrag
+   *  scale so dropping the card oscillates 1.03→0.97→1.01→1 like jelly
+   *  landing on a table (0 = off, keeps the default critically-damped
+   *  settle; interaction-state param, not exported — lightFollow ruling). */
+  dragBounce: number
 }
 
 export type GlassCategory = '经典' | '材质' | '光影' | '创意'
@@ -127,7 +139,11 @@ export function isMotionConfig(c: GlassConfig): boolean {
     // sparkleTwinkle defaults to 0.45, so gating on sparkle keeps every
     // sparkle-off preset (i.e. all pre-Phase-14 ones) correctly unbadged.
     ((c.sparkle ?? 0) > 0.01 && (c.sparkleTwinkle ?? 0) > 0.01) ||
-    (c.wobble ?? 0) > 0.01
+    (c.wobble ?? 0) > 0.01 ||
+    // Phase 15 M1: the iridescent sweep is visible motion — gated on the
+    // sheen itself so iriFlow-carrying-but-iridescence-off configs stay
+    // unbadged (same interlock pattern as sparkleTwinkle).
+    ((c.iridescence ?? 0) > 0.01 && (c.iriFlow ?? 0) > 0.01)
   )
 }
 
@@ -182,10 +198,13 @@ export const DEFAULT_CONFIG: GlassConfig = {
   motionSpeed: 1,
   iridescence: 0,
   iridescenceWidth: 5,
+  iriFlow: 0,
   sparkle: 0,
   sparkleSize: 1,
+  sparkleColor: 'white',
   sparkleTwinkle: 0.45,
   wobble: 0,
+  dragBounce: 0,
 }
 
 export const PRESETS: GlassPreset[] = [
@@ -1627,6 +1646,108 @@ export const PRESETS: GlassPreset[] = [
       shadowDistance: 16,
       shadowSoftness: 36,
       lightAngle: 45,
+    },
+  },
+  // ------------------------------ Phase 15 流光溢彩 ------------------------------
+  {
+    id: 'oil-film-flow',
+    name: '油膜流转',
+    desc: '光谱油膜绕缘流转不息',
+    swatch: 'conic-gradient(from 45deg,#ff8282,#ffc864,#fff08c,#96f096,#78e1ff,#96a5ff,#dc91ff,#ff82c8,#ff8282)',
+    category: '创意',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 30,
+      height: 44,
+      dispersion: 0.4,
+      blur: 2,
+      saturation: 135,
+      cornerRadius: 30,
+      highlight: 0.75,
+      iridescence: 0.85,
+      iridescenceWidth: 8,
+      iriFlow: 0.55,
+      tint: '#94a3b8',
+      tintOpacity: 0.05,
+      shadowIntensity: 0.3,
+      shadowDistance: 12,
+      shadowSoftness: 30,
+    },
+  },
+  {
+    id: 'gilded-stardust',
+    name: '鎏金星尘',
+    desc: '暖金星芒，烛光下的碎金',
+    swatch: 'radial-gradient(circle at 40% 35%,rgba(255,232,150,0.95),rgba(255,208,90,0.6) 45%,rgba(120,77,20,0.75))',
+    category: '创意',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 24,
+      height: 38,
+      dispersion: 0.3,
+      blur: 4,
+      saturation: 115,
+      cornerRadius: 28,
+      tint: '#f59e0b',
+      tintOpacity: 0.1,
+      highlight: 0.8,
+      sparkle: 0.7,
+      sparkleSize: 1.1,
+      sparkleColor: 'gold',
+      sparkleTwinkle: 0.55,
+      glow: 'rgba(255,208,90,0.35)',
+      glowSpread: 30,
+      glowPulse: 0.3,
+    },
+  },
+  {
+    id: 'rainbow-galaxy',
+    name: '星虹万花',
+    desc: '逐星异彩，万花筒星云',
+    swatch: 'conic-gradient(from 90deg,#ff6b6b,#ffd93d,#6bff8f,#6bd5ff,#a06bff,#ff6bd5,#ff6b6b)',
+    category: '创意',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 32,
+      height: 46,
+      dispersion: 0.55,
+      blur: 2,
+      saturation: 140,
+      cornerRadius: 26,
+      highlight: 0.7,
+      sparkle: 0.65,
+      sparkleSize: 1.15,
+      sparkleColor: 'rainbow',
+      sparkleTwinkle: 0.6,
+      iridescence: 0.5,
+      iridescenceWidth: 5,
+    },
+  },
+  {
+    id: 'gummy-bounce',
+    name: '软糖弹跳',
+    desc: '拖起松手，软糖落桌回弹',
+    swatch: 'radial-gradient(circle at 35% 30%,rgba(255,214,236,0.95),rgba(244,114,182,0.55) 45%,rgba(219,39,119,0.7))',
+    category: '创意',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 22,
+      height: 32,
+      dispersion: 0.2,
+      blur: 3,
+      saturation: 145,
+      cornerRadius: 34,
+      tint: '#f472b6',
+      tintOpacity: 0.2,
+      highlight: 0.85,
+      elasticity: 0.75,
+      dragBounce: 0.85,
+      wobble: 0.3,
+      glow: 'rgba(249,168,212,0.3)',
+      glowSpread: 24,
+      shadowIntensity: 0.3,
+      shadowDistance: 14,
+      shadowSoftness: 32,
     },
   },
 ]

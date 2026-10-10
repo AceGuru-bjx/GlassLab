@@ -351,6 +351,12 @@ function LiquidGlassImpl({
   // half-phase delay on the second, so the constellations alternate.
   const sparkle = Math.max(0, Math.min(1, config.sparkle ?? 0))
   const sparkleSize = Math.max(0.5, Math.min(2, config.sparkleSize ?? 1))
+  // Phase 15 M2: sparkle color mode — tints the stars at bake time
+  // ('white' stays byte-identical to Phase 14).
+  const sparkleColor =
+    config.sparkleColor === 'gold' || config.sparkleColor === 'rainbow'
+      ? config.sparkleColor
+      : 'white'
   const sparkleTwinkle = Math.max(0, Math.min(1, config.sparkleTwinkle ?? 0))
   const sparkleAnimated = sparkle > 0.01 && sparkleTwinkle > 0.01
   const twinklePeriodA =
@@ -360,6 +366,12 @@ function LiquidGlassImpl({
   // band, anchored to the light (rotates with lightFollow in real time).
   const iridescence = Math.max(0, Math.min(1, config.iridescence ?? 0))
   const iridescenceWidth = Math.max(2, Math.min(12, config.iridescenceWidth ?? 5))
+  // Phase 15 M1: iridescent sheen flow — the spectral band sweeps 360° via
+  // a registered <angle> var (same channel pattern as rimFlow). The sweep
+  // start anchors to the light so the resting band still reads directional.
+  const iriFlow = Math.max(0, Math.min(1, config.iriFlow ?? 0))
+  const iriAnimated = iriFlow > 0.01 && iridescence > 0.01
+  const iriFlowPeriod = ((7 - 5 * iriFlow) / motionSpeed).toFixed(1)
   const glowAnimated = glowPulse > 0.01 && !!glowColor
   const rimAnimated = rimFlow > 0.01
   // Frosted grain: feTurbulence -> white grain w/ noise-derived alpha.
@@ -734,24 +746,27 @@ function LiquidGlassImpl({
             className="pointer-events-none absolute inset-0"
             style={{
               ...radiusStyle(),
-              backgroundImage: `url("${sparkleDataUri(sparkle * 0.9, sparkleSize, seed)}")`,
+              backgroundImage: `url("${sparkleDataUri(
+                sparkle * 0.9,
+                sparkleSize,
+                seed,
+                sparkleColor
+              )}")`,
               backgroundSize: '220px 220px',
               ...(sparkleAnimated
                 ? {
+                    // Delay rides inside the shorthand (seed B's half-phase
+                    // offset) — mixing the `animation` shorthand with a
+                    // separate `animationDelay` key trips React's
+                    // shorthand/longhand rerender warning.
                     animation: combo(
                       jellyAnim,
                       `glass-sparkle ${(
                         i === 0 ? twinklePeriodA : twinklePeriodB
-                      ).toFixed(1)}s ease-in-out infinite alternate`
+                      ).toFixed(1)}s ease-in-out ${
+                        i === 1 ? `-${(twinklePeriodB / 2).toFixed(1)}s` : '0s'
+                      } infinite alternate`
                     ),
-                    // The delay list maps per-animation: jelly parks at 0s,
-                    // seed B's twinkle keeps its half-phase offset (#106).
-                    animationDelay:
-                      i === 1
-                        ? wobbleAnimated
-                          ? `0s, -${(twinklePeriodB / 2).toFixed(1)}s`
-                          : `-${(twinklePeriodB / 2).toFixed(1)}s`
-                        : undefined,
                   }
                 : {}),
             }}
@@ -760,16 +775,34 @@ function LiquidGlassImpl({
 
       {/* Phase 14 M1: thin-film iridescence — a spectral conic sheen masked
           to the edge band, anchored to the light angle (rotates live with
-          lightFollow). A hair of blur softens the band edges. */}
+          lightFollow). A hair of blur softens the band edges.
+          Phase 15 M1: iriFlow sweeps the conic from-angle through a
+          registered <angle> var — the sheen becomes a drifting oil film.
+          Composes with the jelly morph via the combo() list (#106). */}
       {iridescence > 0.01 && (
         <div
           aria-hidden
+          data-glass-animated={iriAnimated ? '' : undefined}
           className="pointer-events-none absolute inset-0"
           style={{
             ...radiusStyle(),
             padding: iridescenceWidth,
             filter: 'blur(0.5px)',
-            background: `conic-gradient(from ${lightAngleDeg}deg,
+            ...(iriAnimated
+              ? ({
+                  '--glass-iri-start': `${lightAngleDeg}deg`,
+                  '--glass-iri-angle': `${lightAngleDeg}deg`,
+                  animation: combo(
+                    jellyAnim,
+                    `glass-iri-flow ${iriFlowPeriod}s linear infinite`
+                  ),
+                } as React.CSSProperties)
+              : {}),
+            background: `conic-gradient(from ${
+              // The animated var already carries its unit (45deg) — appending
+              // 'deg' here would read "45degdeg" and void the whole gradient.
+              iriAnimated ? 'var(--glass-iri-angle)' : `${lightAngleDeg}deg`
+            },
               rgba(255, 130, 130, ${(0.5 * iridescence).toFixed(3)}) 0deg,
               rgba(255, 200, 100, ${(0.55 * iridescence).toFixed(3)}) 45deg,
               rgba(255, 240, 140, ${(0.5 * iridescence).toFixed(3)}) 90deg,

@@ -98,12 +98,20 @@ const glassConfigSchema = z.object({
   // (older clients and stored rows) rendering identically (off).
   iridescence: z.number().min(0).max(1).default(0),
   iridescenceWidth: z.number().min(2).max(12).default(5),
+  // Phase 15 M1: iridescent sheen flow — default 0 (off) keeps every stored
+  // row and older payload rendering identically.
+  iriFlow: z.number().min(0).max(1).default(0),
   // Phase 14 M2: sparkle glints — same default-0 compatibility contract.
   sparkle: z.number().min(0).max(1).default(0),
   sparkleSize: z.number().min(0.5).max(2).default(1),
   sparkleTwinkle: z.number().min(0).max(1).default(0.45),
+  // Phase 15 M2: sparkle color mode — closed enum, default 'white' keeps
+  // stored rows and older payloads byte-identical.
+  sparkleColor: z.enum(['white', 'gold', 'rainbow']).default('white'),
   // Phase 14 M3: jelly wobble — default 0 (off).
   wobble: z.number().min(0).max(1).default(0),
+  // Phase 15 M3: drag-release bounce — interaction feel, default 0 (off).
+  dragBounce: z.number().min(0).max(1).default(0),
 })
 
 const createPresetSchema = z.object({

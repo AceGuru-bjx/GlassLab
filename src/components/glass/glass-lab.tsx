@@ -8,7 +8,7 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { signIn, signOut, useSession } from 'next-auth/react'
 import {
   Backpack,
@@ -210,10 +210,12 @@ type NumericKey = keyof Pick<
   | 'motionSpeed'
   | 'iridescence'
   | 'iridescenceWidth'
+  | 'iriFlow'
   | 'sparkle'
   | 'sparkleSize'
   | 'sparkleTwinkle'
   | 'wobble'
+  | 'dragBounce'
 >
 
 const PARAM_ROWS: {
@@ -268,12 +270,16 @@ const PARAM_ROWS: {
   //      anchored to the light angle — rotate the light to swing it) ----
   { key: 'iridescence', label: '薄膜虹彩', min: 0, max: 1, step: 0.01, fmt: v => (v <= 0.01 ? '关' : `${Math.round(v * 100)}%`) },
   { key: 'iridescenceWidth', label: '虹彩宽度', min: 2, max: 12, step: 1, fmt: v => `${v}px` },
+  // ---- Phase 15 M1: iridescent flow (spectral band sweeps the edge) ----
+  { key: 'iriFlow', label: '虹彩流动', min: 0, max: 1, step: 0.01, fmt: v => (v <= 0.01 ? '关' : `${(7 - 5 * v).toFixed(1)}s`) },
   // ---- Phase 14 M2: sparkle glints (two twinkling constellations) ----
   { key: 'sparkle', label: '星芒粒子', min: 0, max: 1, step: 0.01, fmt: v => (v <= 0.01 ? '关' : `${Math.round(v * 100)}%`) },
   { key: 'sparkleSize', label: '星芒大小', min: 0.5, max: 2, step: 0.05, fmt: v => `${v.toFixed(2)}×` },
   { key: 'sparkleTwinkle', label: '星芒闪烁', min: 0, max: 1, step: 0.01, fmt: v => (v <= 0.01 ? '静态' : `${(3.4 - 2.6 * v).toFixed(1)}s`) },
   // ---- Phase 14 M3: jelly wobble (border-radius blob breathing) ----
   { key: 'wobble', label: '果冻形变', min: 0, max: 1, step: 0.01, fmt: v => (v <= 0.01 ? '关' : `${Math.round(v * 100)}%`) },
+  // ---- Phase 15 M3: drag-release bounce (interaction feel, opt-in) ----
+  { key: 'dragBounce', label: '拖拽回弹', min: 0, max: 1, step: 0.01, fmt: v => (v <= 0.01 ? '关' : `${Math.round(v * 100)}%`) },
 ]
 
 /** Map a stage background option to the canvas cover generator spec. */
@@ -343,6 +349,9 @@ const RANDOM_RANGES: Record<NumericKey, [number, number]> = {
   sparkleSize: [0.6, 1.4],
   sparkleTwinkle: [0, 0],
   wobble: [0, 0],
+  // Phase 15: flow & interaction feel are opt-in like every animation.
+  iriFlow: [0, 0],
+  dragBounce: [0, 0],
 }
 
 /** Phase 4 M3: variant jitter amplitude (±15% of the current value). */
@@ -599,6 +608,50 @@ function ConfigPanel({
         >
           {config.glow === 'transparent' ? '辉光已关闭' : '关闭辉光'}
         </button>
+
+        {/* Phase 15 M2: sparkle color mode — tints the star field at bake
+            time (white stays the Phase 14 default; gold gilds; rainbow
+            rotates per-star hues through the golden angle). */}
+        <div>
+          <Label className="text-xs">星芒颜色</Label>
+          <div
+            className="mt-1.5 flex gap-1.5"
+            role="radiogroup"
+            aria-label="星芒颜色模式"
+          >
+            {(
+              [
+                { key: 'white', label: '星白', dot: '#ffffff' },
+                { key: 'gold', label: '鎏金', dot: '#ffd05a' },
+                { key: 'rainbow', label: '彩虹', dot: 'conic-gradient(#ff6b6b,#ffd93d,#6bff8f,#6bd5ff,#a06bff,#ff6bd5,#ff6b6b)' },
+              ] as const
+            ).map(m => (
+              <button
+                key={m.key}
+                type="button"
+                role="radio"
+                aria-checked={config.sparkleColor === m.key}
+                data-testid={`sparkle-color-${m.key}`}
+                onClick={() => {
+                  onHistoryCheckpoint?.()
+                  onChange({ sparkleColor: m.key })
+                }}
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-full border px-2 py-1 text-[11px] font-medium transition-colors ${
+                  config.sparkleColor === m.key
+                    ? 'border-teal-500 bg-teal-500/10 text-teal-600'
+                    : 'text-muted-foreground hover:border-teal-500/40 hover:text-foreground'
+                }`}
+              >
+                <span
+                  aria-hidden
+                  className="h-2.5 w-2.5 rounded-full border border-black/10"
+                  style={{ background: m.dot }}
+                />
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -1024,6 +1077,25 @@ export function GlassLab() {
   // the pivot for the pointer→light angle.
   const dragCardRef = useRef<HTMLDivElement>(null)
   const lightFollowRaf = useRef(0)
+  // Phase 15 M3: drag-release bounce — an underdamped spring on the
+  // whileDrag scale so releasing the card settles through
+  // 1.03→0.97→1.01→1 like a jelly landing on the table. dragBounce 0 keeps
+  // framer's default critically-damped settle (existing presets unchanged);
+  // reduced-motion snaps instead of oscillating. transform channel is
+  // disjoint from the jelly morph's border-radius, so both compose.
+  const reduceMotion = useReducedMotion()
+  const dragBounce = Math.max(0, Math.min(1, config.dragBounce ?? 0))
+  const dragBounceTransition =
+    dragBounce > 0.01 && !reduceMotion
+      ? {
+          scale: {
+            type: 'spring' as const,
+            stiffness: 300,
+            damping: Math.max(5, 22 - 18 * dragBounce),
+            mass: 0.85,
+          },
+        }
+      : undefined
   // Phase 12 M1: inertial tracking — the pointer publishes a target bearing
   // here; the smoothing loop eases the rendered angle toward it.
   const lightTargetRef = useRef<number | null>(null)
@@ -2073,6 +2145,7 @@ export function GlassLab() {
                         dragElastic={config.elasticity}
                         dragMomentum={false}
                         whileDrag={{ scale: 1.03 }}
+                        transition={dragBounceTransition}
                         className="pointer-events-auto cursor-grab active:cursor-grabbing"
                         data-testid="draggable-card"
                       >
@@ -2085,6 +2158,7 @@ export function GlassLab() {
                       drag
                       dragConstraints={stageRef}
                       dragElastic={config.elasticity}
+                      transition={dragBounceTransition}
                       className="absolute left-6 top-6 z-10 cursor-grab active:cursor-grabbing"
                     >
                       <GlassPill config={config} label="液态玻璃 · live" dark={bg.dark} />
@@ -2093,6 +2167,7 @@ export function GlassLab() {
                       drag
                       dragConstraints={stageRef}
                       dragElastic={config.elasticity}
+                      transition={dragBounceTransition}
                       className="absolute bottom-6 right-6 z-10 cursor-grab active:cursor-grabbing"
                     >
                       <GlassPill config={config} label="拖我试试 ↕" dark={bg.dark} />
@@ -2521,7 +2596,7 @@ export function GlassLab() {
             </a>{' '}
             (Apache-2.0)
           </span>
-          <span>第十四阶段 · 虹彩与星芒 / 薄膜虹彩 · 星芒粒子 · 果冻形变 · 样式库 {PRESETS.length} 款</span>
+          <span>第十五阶段 · 流光溢彩 / 虹彩流动 · 星芒颜色 · 拖拽回弹 · 样式库 {PRESETS.length} 款</span>
         </div>
       </footer>
     </div>
