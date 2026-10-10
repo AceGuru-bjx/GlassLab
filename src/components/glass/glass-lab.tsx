@@ -185,6 +185,8 @@ type NumericKey = keyof Pick<
   | 'frost'
   | 'edgeBlur'
   | 'vignette'
+  | 'glowOpacity'
+  | 'glowSpread'
 >
 
 const PARAM_ROWS: {
@@ -209,6 +211,9 @@ const PARAM_ROWS: {
   { key: 'edgeBlur', label: '边缘高斯弥散', min: 0, max: 1, step: 0.05, fmt: v => `${Math.round(v * 100)}%` },
   { key: 'frost', label: '磨砂噪点', min: 0, max: 1, step: 0.05, fmt: v => `${Math.round(v * 100)}%` },
   { key: 'vignette', label: '暗角', min: 0, max: 1, step: 0.05, fmt: v => `${Math.round(v * 100)}%` },
+  // ---- Phase 9 M1: glow system ----
+  { key: 'glowOpacity', label: '辉光强度', min: 0, max: 1, step: 0.01, fmt: v => `${Math.round(v * 100)}%` },
+  { key: 'glowSpread', label: '辉光范围', min: 0, max: 60, step: 1, fmt: v => `${v}px` },
 ]
 
 /** Map a stage background option to the canvas cover generator spec. */
@@ -250,6 +255,8 @@ const RANDOM_RANGES: Record<NumericKey, [number, number]> = {
   frost: [0, 0.4],
   edgeBlur: [0, 0.5],
   vignette: [0, 0.35],
+  glowOpacity: [0.5, 1],
+  glowSpread: [12, 40],
 }
 
 /** Phase 4 M3: variant jitter amplitude (±15% of the current value). */
@@ -1341,7 +1348,7 @@ export function GlassLab() {
           </div>
           <div className="flex items-center gap-2">
             <span className="hidden rounded-full border border-teal-500/30 bg-teal-500/10 px-2.5 py-1 text-[10px] font-medium text-teal-600 sm:inline-block">
-              Phase 8 · 彩色光效系统
+              Phase 9 · 辉光系统与微动效
             </span>
             {sessionStatus === 'loading' ? (
               <div className="h-8 w-20 animate-pulse rounded-lg bg-muted" aria-hidden />
@@ -2114,7 +2121,7 @@ export function GlassLab() {
             </a>{' '}
             (Apache-2.0)
           </span>
-          <span>第八阶段 · 彩色菲涅尔高光 / 色彩控制台 / 样式库 38 款</span>
+          <span>第九阶段 · 辉光系统升级 / 质感纹理层 / 样式库 44 款</span>
         </div>
       </footer>
     </div>

@@ -12,7 +12,7 @@
  */
 
 import type { GlassConfig } from './presets'
-import { withAlpha } from './color'
+import { scaleColorAlpha, withAlpha } from './color'
 
 export interface CoverBackgroundSpec {
   /** image source (built-in wallpaper path or uploaded background raw URL) */
@@ -123,11 +123,11 @@ export async function generateGlassCover(
     const { x, y, w, h } = CARD
     const r = Math.max(4, Math.min(config.cornerRadius, 64) * 0.6)
 
-    // glow shadow behind the card
+    // glow shadow behind the card (Phase 9: intensity & radius params)
     if (config.glow && config.glow !== 'transparent') {
       ctx.save()
-      ctx.shadowColor = config.glow
-      ctx.shadowBlur = 26
+      ctx.shadowColor = scaleColorAlpha(config.glow, Math.max(0, Math.min(1, config.glowOpacity ?? 1)))
+      ctx.shadowBlur = Math.max(0, Math.min(60, config.glowSpread ?? 24)) * 1.1
       roundRectPath(ctx, x, y, w, h, r)
       ctx.fillStyle = 'rgba(255,255,255,0.01)'
       ctx.fill()

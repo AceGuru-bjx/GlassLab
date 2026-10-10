@@ -39,6 +39,10 @@ export interface GlassConfig {
   elasticity: number
   /** Optional colored glow outside the glass */
   glow: string
+  /** Phase 9 M1: glow intensity multiplier — final alpha = glow's own alpha × this, 0..1 */
+  glowOpacity: number
+  /** Phase 9 M1: glow diffusion radius in px (box-shadow blur radius) */
+  glowSpread: number
   /** Phase 5: frosted grain overlay (SVG feTurbulence noise), 0..1 */
   frost: number
   /** Phase 5: progressive gaussian blur ring at the glass edges, 0..1 */
@@ -78,6 +82,8 @@ export const DEFAULT_CONFIG: GlassConfig = {
   overLight: false,
   elasticity: 0.55,
   glow: 'transparent',
+  glowOpacity: 1,
+  glowSpread: 24,
   frost: 0,
   edgeBlur: 0,
   vignette: 0,

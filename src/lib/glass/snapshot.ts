@@ -12,7 +12,7 @@
  */
 
 import type { GlassConfig } from './presets'
-import { withAlpha } from './color'
+import { scaleColorAlpha, withAlpha } from './color'
 
 export interface SnapshotBackgroundSpec {
   /** image source (built-in wallpaper path or uploaded background raw URL) */
@@ -147,11 +147,12 @@ export async function generateGlassSnapshot(
     const { x, y, w, h } = CARD
     const r = Math.min(Math.max(8, Math.min(config.cornerRadius, 64) * 2.4), w / 2, h / 2)
 
-    // glow shadow behind the card
+    // glow shadow behind the card (Phase 9: intensity & radius params;
+    // 4× the stage scale, mirroring the other snapshot proportions)
     if (config.glow && config.glow !== 'transparent') {
       ctx.save()
-      ctx.shadowColor = config.glow
-      ctx.shadowBlur = 96
+      ctx.shadowColor = scaleColorAlpha(config.glow, Math.max(0, Math.min(1, config.glowOpacity ?? 1)))
+      ctx.shadowBlur = Math.max(0, Math.min(60, config.glowSpread ?? 24)) * 4
       roundRectPath(ctx, x, y, w, h, r)
       ctx.fillStyle = 'rgba(255,255,255,0.01)'
       ctx.fill()

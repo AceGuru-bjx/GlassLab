@@ -9,7 +9,7 @@
  *  - a URL share link (#g=<base64url of config JSON>, unicode-safe)
  */
 
-import { withAlpha } from './color'
+import { scaleColorAlpha, withAlpha } from './color'
 import { DEFAULT_CONFIG, type GlassConfig } from './presets'
 
 function radiusPx(cornerRadius: number): string {
@@ -25,31 +25,47 @@ function cssBody(config: GlassConfig): string {
       : '#ffffff'
   const frost = Math.max(0, Math.min(1, config.frost ?? 0))
   const vignette = Math.max(0, Math.min(1, config.vignette ?? 0))
+  const edgeBlur = Math.max(0, Math.min(1, config.edgeBlur ?? 0))
+  const glowOpacity = Math.max(0, Math.min(1, config.glowOpacity ?? 1))
+  const glowSpread = Math.max(0, Math.min(60, config.glowSpread ?? 24))
   const glow =
     config.glow && config.glow !== 'transparent'
-      ? `,\n  0 0 24px 2px ${config.glow}`
+      ? `,\n  0 0 ${glowSpread}px ${(glowSpread / 12).toFixed(1)}px ${scaleColorAlpha(config.glow, glowOpacity)}`
       : ''
-  const tint =
+  const tintBg =
     config.tintOpacity > 0
-      ? `\n  /* 染色 ${Math.round(config.tintOpacity * 100)}% */\n  background: ${withAlpha(config.tint, config.tintOpacity)};`
+      ? `\n  /* 染色 ${Math.round(config.tintOpacity * 100)}% */\n  background-color: ${withAlpha(config.tint, config.tintOpacity)};`
       : ''
   const vignetteShadow =
     vignette > 0.01
       ? `, inset 0 0 48px rgba(0, 0, 0, ${((0.55 * vignette) || 0).toFixed(3)})`
       : ''
-  const frostLayer =
+  // Phase 9: frost noise moves to the ROOT element as a background-image
+  // layer — the ::after pseudo-element is now reserved for the edge-blur
+  // ring. The grain intensity is baked into the SVG's feColorMatrix alpha
+  // row (the root cannot take ::after's `opacity` without dimming content).
+  const frostGrain = frost > 0.01 ? (0.34 * frost * 0.5).toFixed(4) : '0'
+  const frostBg =
     frost > 0.01
-      ? `\n\n/* 磨砂噪点 ${Math.round(frost * 100)}%（SVG feTurbulence，零 JS） */\n.liquid-glass::after {\n  content: "";\n  position: absolute;\n  inset: 0;\n  border-radius: inherit;\n  pointer-events: none;\n  opacity: ${(frost * 0.5).toFixed(3)};\n  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0.34 0.34 0.34 0 0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");\n  background-size: 180px 180px;\n}`
+      ? `\n  /* 磨砂噪点 ${Math.round(frost * 100)}%（SVG feTurbulence，零 JS） */\n  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 ${frostGrain} ${frostGrain} ${frostGrain} 0 0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");\n  background-size: 180px 180px;`
+      : ''
+  // Phase 9 (closing the Phase 5 legacy gap): edge-blur ring — a masked
+  // backdrop-blur band over the outer edge, center stays crisp. Pure CSS.
+  const edgeBand = Math.round(6 + edgeBlur * 22)
+  const edgeBlurPx = (edgeBlur * 26).toFixed(1)
+  const edgeLayer =
+    edgeBlur > 0.01
+      ? `\n\n/* 边缘高斯弥散 ${Math.round(edgeBlur * 100)}% — 边缘环 backdrop-blur，中心保持清晰 */\n.liquid-glass::after {\n  content: "";\n  position: absolute;\n  inset: 0;\n  border-radius: inherit;\n  padding: ${edgeBand}px;\n  pointer-events: none;\n  -webkit-backdrop-filter: blur(${edgeBlurPx}px);\n  backdrop-filter: blur(${edgeBlurPx}px);\n  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);\n  -webkit-mask-composite: xor;\n  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);\n  mask-composite: exclude;\n}`
       : ''
 
   return `/* 生成自 GlassLab 玻璃实验室 — https://github.com/AceGuru-bjx/GlassLab
- * 说明：blur/saturate/染色/边缘高光/磨砂噪点/暗角为纯 CSS；
- * 完整的边缘位移折射与分层边缘高斯弥散（Kyant0 算法）由 JS 引擎驱动，见上方仓库。 */
+ * 说明：blur/saturate/染色/磨砂噪点/暗角/边缘高斯弥散/辉光为纯 CSS；
+ * 完整的边缘位移折射（Kyant0 算法）由 JS 引擎驱动，见上方仓库。 */
 .liquid-glass {
   position: relative;
   border-radius: ${radiusPx(config.cornerRadius)};
   -webkit-backdrop-filter: blur(${config.blur}px) saturate(${config.saturation}%);
-  backdrop-filter: blur(${config.blur}px) saturate(${config.saturation}%);${tint}
+  backdrop-filter: blur(${config.blur}px) saturate(${config.saturation}%);${tintBg}${frostBg}
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28),
     inset 0 -1px 0 rgba(0, 0, 0, 0.12), 0 8px 32px rgba(0, 0, 0, 0.12)${vignetteShadow}${glow};
 }
@@ -72,7 +88,7 @@ function cssBody(config: GlassConfig): string {
   -webkit-mask-composite: xor;
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask-composite: exclude;
-}${frostLayer}`
+}${edgeLayer}`
 }
 
 /** Standalone CSS export. */
@@ -170,6 +186,8 @@ export function validateConfigObject(raw: unknown): GlassConfig | null {
     'frost',
     'edgeBlur',
     'vignette',
+    'glowOpacity',
+    'glowSpread',
   ] as const
   for (const k of numKeys) {
     const v = Number(merged[k])

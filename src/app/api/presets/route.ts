@@ -49,6 +49,10 @@ const glassConfigSchema = z.object({
   overLight: z.boolean(),
   elasticity: z.number().min(0).max(1),
   glow: colorField(64),
+  // Phase 9 M1: glow intensity multiplier & diffusion radius — defaults keep
+  // pre-Phase-9 payloads (older clients and stored rows) visually identical.
+  glowOpacity: z.number().min(0).max(1).default(1),
+  glowSpread: z.number().min(0).max(60).default(24),
   // Phase 5 layered effects — defaults keep pre-Phase-5 payloads (older
   // clients and stored rows) valid instead of 400/corrupt.
   frost: z.number().min(0).max(1).default(0),

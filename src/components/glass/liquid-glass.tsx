@@ -29,7 +29,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { withAlpha } from '@/lib/glass/color'
+import { scaleColorAlpha, withAlpha } from '@/lib/glass/color'
 import { renderDisplacementMaps } from '@/lib/glass/displacement-map'
 import type { GlassConfig } from '@/lib/glass/presets'
 
@@ -246,6 +246,15 @@ function LiquidGlassImpl({
   const frost = Math.max(0, Math.min(1, config.frost ?? 0))
   const edgeBlur = Math.max(0, Math.min(1, config.edgeBlur ?? 0))
   const vignette = Math.max(0, Math.min(1, config.vignette ?? 0))
+  // ---- Phase 9 M1: glow system ----
+  // Multiplier semantics: final alpha = glow's own embedded alpha × glowOpacity.
+  // Default 1 keeps every pre-Phase-9 preset visually identical.
+  const glowOpacity = Math.max(0, Math.min(1, config.glowOpacity ?? 1))
+  const glowSpread = Math.max(0, Math.min(60, config.glowSpread ?? 24))
+  const glowColor =
+    config.glow && config.glow !== 'transparent'
+      ? scaleColorAlpha(config.glow, glowOpacity)
+      : null
   // Frosted grain: feTurbulence -> white grain w/ noise-derived alpha.
   // Pure SVG-filter overlay, so unlike the refraction path it also works
   // on Safari/Firefox (no backdrop url() needed).
@@ -427,10 +436,10 @@ function LiquidGlassImpl({
           willChange: 'backdrop-filter',
           // Outer glow via box-shadow (a host-level `filter` would turn the
           // host into a backdrop root and break the refraction sampling).
-          boxShadow:
-            config.glow && config.glow !== 'transparent'
-              ? `0 0 24px 2px ${config.glow}`
-              : undefined,
+          // Phase 9: radius/spread and intensity are independent params.
+          boxShadow: glowColor
+            ? `0 0 ${glowSpread}px ${(glowSpread / 12).toFixed(1)}px ${glowColor}`
+            : undefined,
         }}
       />
 
