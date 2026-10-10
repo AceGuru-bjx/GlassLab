@@ -366,3 +366,30 @@ Stage Summary:
 未解决/风险与下一步建议：
 - PR #364 仍待 Ultra-Guru 维护者评审（正常等待）
 - 下轮候选：①拉丝方向参数化（当前固定水平，可加 angle 或跟随 lightAngle）；②气泡上升动画（CSS background-position-y 动画）与气泡大小密度参数；③辉光呼吸与 rimFlow 的预设化（4-6 款动效预设）；④导出 React 组件的动效 demo 页（展示呼吸/流动效果）；⑤第五/六轮深度检查（覆盖 Phase 9 新增约 600 行）
+
+---
+Task ID: 16
+Agent: Z.ai Code (webDevReview 定时巡检)
+Task: 巡检轮——QA 冒烟全绿后自主开发第十阶段「动态玻璃生态」：拉丝方向参数化（#89）/ 气泡动态系统（#90）/ 6 款动效预设 50 款（#91）
+
+Work Log:
+- 前置核实：worklog Task 15 闭环态；git d6e123c 与远程同步、CI 绿、0 open issue、dev server 200、PR #364 open 无维护者评审
+- agent-browser 全站 QA 冒烟（无 bug）：44 预设切换/7-tap 引擎 DOM（21 feDisp/18 feComp）/19 滑杆/rim-flow 5.9s + glow-pulse 3.5s 公式吻合/辉光开关与 Ctrl+Z/导出三格式/PNG 快照 1600×1000/分享链接 24 参数/390px 无溢出/注册 201/保存 201（游客保存为 session.ts 设计行为）→ 项目稳定，转入功能开发
+- 自主规划第十阶段（Task 15 候选 ①②③ 落地）：建 #89/#90/#91 入 Project Todo
+- M1（#89）拉丝方向参数化：brushedAngle 0-360°——SVG `<pattern patternTransform=rotate>` 旋转整个无限平铺网格（无缝性保持），angle 0 保持无 pattern 旧输出逐字节一致；canvas 近似绕卡片中心旋转画线覆盖全对角线；全链路（GlassConfig/zod default 0/分享 numKeys/滑杆 step 5/RANDOM_RANGES [0,360]/CSS 导出同构）
+- M2（#90）气泡动态系统：bubbleSize 0.4-2.2 + bubbleDensity 0.3-2.5（LCG 确定性拒绝采样，球数=8×density，全在贴图内+防重叠；size=1/density=1 与 Phase 9 固定 8 球布局逐字节一致）；bubbleRise 0-1——`glass-bubble-rise` keyframes 无缝 200px 贴图上移一整格循环（周期 8-6.5v 秒），挂 [data-glass-animated] 受 reduced-motion 守卫；CSS 导出根动画合并（glow-pulse + bubble-rise 逗号列表）+ 按背景层数生成 per-layer background-position keyframes（气泡层恒为最后一层）+ motionGuard 条件扩展
+- M3（#91）动效预设 6 款（创意类）：深海涌动（气泡上浮+幽蓝呼吸）/呼吸月光（柔白呼吸+46px 弥散+磨砂）/流光溢彩（高光流动+青碧 rim+色散 0.7）/熔岩暗涌（暖红脉动+大气泡慢浮）/星尘漂浮（0.45× 微气泡密度 2.2 慢浮+薄雾）/曳光金丝（60° 斜拉丝+高光流动+金辉光）；44→50（7/15/10/18），metadata 计数动态派生，footer 更新第十阶段
+- E2E 验证矩阵全绿：字节级后向兼容三契约（brushed angle=0/bubbles 默认/angle 360 归一化）；密度实时重生成（1.5→12 球、1.9→15 球）；深海涌动双动画并行（bubble-rise 4.4s + glow-pulse 2.3s，辉光层 rgba(56,189,248,.35) 0 0 30px 2.5px opacity 0.97 呼吸中）；曳光金丝 patternTransform rotate(60)+rim-flow；API 矩阵（旧载荷 201+默认 0/1/1/0、brushedAngle 400→400、bubbleSize 9→400）；分享深载入 4 参数精确还原（124/1.52/1.31/0）；DB 往返 60/0.8/1.5/0.55；我的预设载入 6 参数全对；撤销/随机锁定（动效恒 0）/A/B 对比双 backdrop/390px 无溢出/0 console error；VLM 视觉实证（斜向拉丝+金色 rim+金辉光三「是」；气泡球体高光点「是」；辉光「否」为呼吸波谷截图时机假象，程序化样式已证）
+- 提交 c2139d9 → CI 四门禁全绿 → #89/#90/#91 自动关闭 + 验证报告回帖 → Project 三条目 Done
+- 测试数据清理：QA 预设与账号删除归零
+
+Stage Summary:
+- 第十阶段三里程碑闭环：拉丝任意角度（pattern 网格旋转）/ 气泡大小密度上升三参数（LCG 确定性 + 无缝循环动画）/ 动效预设库 50 款
+- GlassConfig 参数 27→31（+brushedAngle/bubbleSize/bubbleDensity/bubbleRise），全部默认值后向兼容（旧输出逐字节一致三契约）
+- 关键决策：①拉丝旋转用 patternTransform 而非 CSS transform（transform 会露角、破坏圆角裁剪）；②气泡默认布局走旧固定表、非默认值才走程序化生成（存量观感字节级不变）；③CSS 导出气泡上升用 per-layer background-position keyframes（多背景层只有气泡层动）；④根元素动画合并为逗号列表（glow-pulse 与 bubble-rise 共存）
+- 沉淀陷阱：①radix Tabs/Toggle 用 eval 合成 click 不触发激活，必须 agent-browser find role click（真实指针事件）或 pointerdown+pointerup 序列；②agent-browser eval 箭头函数体含嵌套括号偶发解析失败，改 var 声明或 IIFE；③GraphQL field ID 打印勿截断（PVTSSF_ 开头实际 36 字符）
+- GitHub 产物：issues #89-#91 全闭环（报告回帖）、Project 三条目 Done、repo 推进至 c2139d9（CI 四门禁全绿）、PR #364 待审（正常等待）
+
+未解决/风险与下一步建议：
+- PR #364 仍待 Ultra-Guru 维护者评审（正常等待）
+- 下轮候选：①气泡水平漂移（background-position-x 往复）与拉丝方向跟随 lightAngle 联动选项；②动效预设专属「动效」分类 tab 或动效徽章标记；③辉光呼吸与气泡上升的相位差参数（错落感）；④导出 React 组件的动效 demo 页；⑤第六轮深度检查（覆盖 Phase 10 新增约 400 行）
