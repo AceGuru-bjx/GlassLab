@@ -148,6 +148,22 @@ export function bubbleRisePeriodSec(bubbleRise: number): string {
   return (8 - 6.5 * clamp(bubbleRise, 0, 1)).toFixed(1)
 }
 
+/** Phase 13 M1: horizontal drift sway period (seconds) — shares the rise
+ * period family so the two axes stay rhythmically coupled (a phase-offset
+ * spiral rather than two unrelated metronomes). Drift alone sways slower. */
+export function bubbleDriftPeriodSec(bubbleDrift: number, bubbleRise: number): string {
+  const risePeriod = 8 - 6.5 * clamp(bubbleRise, 0, 1)
+  const sway = 9 - 4 * clamp(bubbleDrift, 0, 1)
+  // When both run, lock the sway to ~1.33× the rise period (4:3 coupling —
+  // the combined path reads as a spiral instead of a Lissajous knot).
+  return ((bubbleRise > 0.01 ? risePeriod * 1.33 : sway) + 0.05).toFixed(1)
+}
+
+/** Phase 13 M1: drift sway amplitude in px (0..1 → 0..60px). */
+export function bubbleDriftAmpPx(bubbleDrift: number): number {
+  return Math.round(clamp(bubbleDrift, 0, 1) * 60)
+}
+
 // ---------------------------------------------------------------------------
 // Canvas2D approximations for the cover/snapshot generators (the SVG
 // data-URIs would need an async image decode; canvas primitives are the

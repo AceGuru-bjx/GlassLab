@@ -238,6 +238,25 @@
   }
 }
 
+/* Phase 13 M1: horizontal drift — a sine-like sway (ease-in-out alternate)
+ * on background-position-x. Combined with rise it traces a spiral; alone
+ * it sways the static tile. Amplitude is baked into the keyframes via a
+ * registered custom property so the engine and CSS export share one name. */
+@property --glass-drift-amp {
+  syntax: '<length>';
+  initial-value: 0px;
+  inherits: false;
+}
+
+@keyframes glass-bubble-drift {
+  from {
+    background-position-x: calc(0px - var(--glass-drift-amp));
+  }
+  to {
+    background-position-x: var(--glass-drift-amp);
+  }
+}
+
 /* Accessibility: motion is an enhancement, never a requirement (#88). */
 @media (prefers-reduced-motion: reduce) {
   [data-glass-animated] {

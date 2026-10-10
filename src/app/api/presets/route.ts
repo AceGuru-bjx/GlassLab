@@ -71,6 +71,9 @@ const glassConfigSchema = z.object({
   bubbleSize: z.number().min(0.4).max(2.2).default(1),
   bubbleDensity: z.number().min(0.3).max(2.5).default(1),
   bubbleRise: z.number().min(0).max(1).default(0),
+  // Phase 13 M1: horizontal drift — default 0 (off) keeps every stored row
+  // and older payload rendering identically.
+  bubbleDrift: z.number().min(0).max(1).default(0),
   // Phase 11 M1: directional cast shadow — defaults keep pre-Phase-11
   // payloads (older clients and stored rows) rendering identically.
   shadowIntensity: z.number().min(0).max(1).default(0),
@@ -88,6 +91,9 @@ const glassConfigSchema = z.object({
   brushedFollow: z.boolean().default(false),
   edgeBlur: z.number().min(0).max(1).default(0),
   vignette: z.number().min(0).max(1).default(0),
+  // Phase 13 M2: global motion tempo — default 1 divides every animation
+  // period by exactly 1 (no change), keeping stored rows identical.
+  motionSpeed: z.number().min(0.25).max(2).default(1),
 })
 
 const createPresetSchema = z.object({

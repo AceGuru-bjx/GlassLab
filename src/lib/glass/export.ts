@@ -10,7 +10,13 @@
  */
 
 import { scaleColorAlpha, withAlpha } from './color'
-import { brushedDataUri, bubbleRisePeriodSec, bubblesDataUri } from './textures'
+import {
+  brushedDataUri,
+  bubbleDriftAmpPx,
+  bubbleDriftPeriodSec,
+  bubbleRisePeriodSec,
+  bubblesDataUri,
+} from './textures'
 import { DEFAULT_CONFIG, type GlassConfig } from './presets'
 
 function radiusPx(cornerRadius: number): string {
@@ -112,15 +118,27 @@ function cssBody(config: GlassConfig): string {
   // ---- Phase 9 M3: motion export ----
   const glowPulse = Math.max(0, Math.min(1, config.glowPulse ?? 0))
   const rimFlow = Math.max(0, Math.min(1, config.rimFlow ?? 0))
-  const glowPulsePeriod = (3.6 - 3.0 * glowPulse).toFixed(1)
-  const rimFlowPeriod = (6 - 4.5 * rimFlow).toFixed(1)
+  // Phase 13 M1/M2: drift + global tempo — periods divide by motionSpeed.
+  const bubbleDrift = Math.max(0, Math.min(1, config.bubbleDrift ?? 0))
+  const motionSpeed = Math.max(0.25, Math.min(2, config.motionSpeed ?? 1))
+  const glowPulsePeriod = ((3.6 - 3.0 * glowPulse) / motionSpeed).toFixed(1)
+  const rimFlowPeriod = ((6 - 4.5 * rimFlow) / motionSpeed).toFixed(1)
+  const risePeriod = (Number(bubbleRisePeriodSec(bubbleRise)) / motionSpeed).toFixed(1)
+  const driftPeriod = (
+    Number(bubbleDriftPeriodSec(bubbleDrift, bubbleRise)) / motionSpeed
+  ).toFixed(1)
+  const driftAmp = bubbleDriftAmpPx(bubbleDrift)
   const hasGlow = !!(config.glow && config.glow !== 'transparent')
   // Glow breathing animates the root's full box-shadow stack (only the glow
   // alpha differs between the two keyframes) — box-shadow interpolates.
   // Phase 10 M2: bubble rise lives on the same root element (the bubble
   // tile is the last background-image layer), so both rules merge into a
   // single comma-separated animation list.
+  // Phase 13 M1: drift joins the same list — it owns background-position-x
+  // (longhand) while rise owns the -y axis through the shorthand; the
+  // per-layer keyframes below give rise the -y values and drift the -x.
   const riseAnimated = bubbleRise > 0.01 && bubbles > 0.01
+  const driftAnimated = bubbleDrift > 0.01 && bubbles > 0.01
   const rootAnimations: string[] = []
   if (glowPulse > 0.01 && hasGlow) {
     rootAnimations.push(
@@ -128,8 +146,11 @@ function cssBody(config: GlassConfig): string {
     )
   }
   if (riseAnimated) {
+    rootAnimations.push(`glass-bubble-rise ${risePeriod}s linear infinite`)
+  }
+  if (driftAnimated) {
     rootAnimations.push(
-      `glass-bubble-rise ${bubbleRisePeriodSec(bubbleRise)}s linear infinite`
+      `glass-bubble-drift ${driftPeriod}s ease-in-out infinite alternate`
     )
   }
   const glowAnimationRule =
@@ -150,15 +171,30 @@ function cssBody(config: GlassConfig): string {
   // Bubble rise: the seamless 200px tile shifts up by exactly one tile.
   // background-position must list every background-image layer — bubbles is
   // always the last one pushed onto the stack, the others hold still.
+  // Phase 13 M1: with drift on, the rise keyframes switch to per-axis
+  // longhands (-x holds still for rise; -y holds still for drift) so both
+  // animations compose on the same root without shorthand clobbering.
   const bubbleRiseKeyframes = riseAnimated
-    ? `\n\n/* 气泡上升（周期 ${bubbleRisePeriodSec(bubbleRise)}s）— 无缝 200px 贴图循环上移 */\n@keyframes glass-bubble-rise {\n  from { background-position: ${bgImages
-        .map(() => '0 0')
-        .join(', ')}; }\n  to { background-position: ${bgImages
-        .map((_, i) => (i === bgImages.length - 1 ? '0 -200px' : '0 0'))
-        .join(', ')}; }\n}`
+    ? `\n\n/* 气泡上升（周期 ${risePeriod}s）— 无缝 200px 贴图循环上移${
+        driftAnimated ? '（与漂移双轴复合：-y 上升 / -x 摇摆）' : ''
+      } */\n@keyframes glass-bubble-rise {\n  from { ${
+        driftAnimated
+          ? 'background-position-x: 0px;'
+          : `background-position: ${bgImages.map(() => '0 0').join(', ')};`
+      } }\n  to { ${
+        driftAnimated
+          ? 'background-position-x: 0px;'
+          : `background-position: ${bgImages
+              .map((_, i) => (i === bgImages.length - 1 ? '0 -200px' : '0 0'))
+              .join(', ')};`
+      } }\n}`
+    : ''
+  // Phase 13 M1: horizontal sway keyframes + the @property amplitude hook.
+  const bubbleDriftKeyframes = driftAnimated
+    ? `\n\n/* 气平漂移（周期 ${driftPeriod}s，振幅 ${driftAmp}px）— background-position-x 正弦往复 */\n@property --glass-drift-amp {\n  syntax: "<length>";\n  initial-value: 0px;\n  inherits: false;\n}\n@keyframes glass-bubble-drift {\n  from { background-position-x: calc(0px - var(--glass-drift-amp)); }\n  to { background-position-x: var(--glass-drift-amp); }\n}\n.liquid-glass { --glass-drift-amp: ${driftAmp}px; }`
     : ''
   const motionGuard =
-    glowPulse > 0.01 || rimFlow > 0.01 || riseAnimated
+    glowPulse > 0.01 || rimFlow > 0.01 || riseAnimated || driftAnimated
       ? `\n\n@media (prefers-reduced-motion: reduce) {\n  .liquid-glass, .liquid-glass::before { animation: none !important; }\n}`
       : ''
 
@@ -192,7 +228,7 @@ function cssBody(config: GlassConfig): string {
   -webkit-mask-composite: xor;
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask-composite: exclude;
-}${edgeLayer}${glowPulseKeyframes}${rimFlowKeyframes}${bubbleRiseKeyframes}${motionGuard}`
+}${edgeLayer}${glowPulseKeyframes}${rimFlowKeyframes}${bubbleRiseKeyframes}${bubbleDriftKeyframes}${motionGuard}`
 }
 
 /** Standalone CSS export. */
@@ -300,6 +336,7 @@ export function validateConfigObject(raw: unknown): GlassConfig | null {
     'bubbleSize',
     'bubbleDensity',
     'bubbleRise',
+    'bubbleDrift',
     'shadowIntensity',
     'shadowDistance',
     'shadowSoftness',
@@ -310,6 +347,7 @@ export function validateConfigObject(raw: unknown): GlassConfig | null {
     'glowSpread',
     'glowPulse',
     'rimFlow',
+    'motionSpeed',
   ] as const
   for (const k of numKeys) {
     const v = Number(merged[k])

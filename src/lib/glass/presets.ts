@@ -61,6 +61,8 @@ export interface GlassConfig {
   bubbleDensity: number
   /** Phase 10 M2: bubble rise speed — 0=off, 1=fastest (period 8s→1.5s) */
   bubbleRise: number
+  /** Phase 13 M1: horizontal drift sway, 0..1 (0 = off; with rise → spiral) */
+  bubbleDrift: number
   /** Phase 11 M1: directional cast shadow intensity, 0..1 (0 = off) */
   shadowIntensity: number
   /** Phase 11 M1: cast shadow offset distance in px */
@@ -82,6 +84,10 @@ export interface GlassConfig {
   edgeBlur: number
   /** Phase 5: radial corner darkening (vignette), 0..1 */
   vignette: number
+  /** Phase 13 M2: global motion tempo, 0.25..2 (1 = authored speed —
+   *  divides every animation period: glow breathing, rim flow, bubble
+   *  rise and drift). Default 1 keeps all existing renders identical. */
+  motionSpeed: number
 }
 
 export type GlassCategory = '经典' | '材质' | '光影' | '创意'
@@ -98,7 +104,10 @@ export type CategoryFilter = '全部' | GlassCategory | '动效'
  */
 export function isMotionConfig(c: GlassConfig): boolean {
   return (
-    (c.glowPulse ?? 0) > 0.01 || (c.rimFlow ?? 0) > 0.01 || (c.bubbleRise ?? 0) > 0.01
+    (c.glowPulse ?? 0) > 0.01 ||
+    (c.rimFlow ?? 0) > 0.01 ||
+    (c.bubbleRise ?? 0) > 0.01 ||
+    (c.bubbleDrift ?? 0) > 0.01
   )
 }
 
@@ -140,6 +149,7 @@ export const DEFAULT_CONFIG: GlassConfig = {
   bubbleSize: 1,
   bubbleDensity: 1,
   bubbleRise: 0,
+  bubbleDrift: 0,
   shadowIntensity: 0,
   shadowDistance: 14,
   shadowSoftness: 28,
@@ -149,6 +159,7 @@ export const DEFAULT_CONFIG: GlassConfig = {
   brushedFollow: false,
   edgeBlur: 0,
   vignette: 0,
+  motionSpeed: 1,
 }
 
 export const PRESETS: GlassPreset[] = [
@@ -1071,6 +1082,65 @@ export const PRESETS: GlassPreset[] = [
       glowSpread: 30,
       glowPulse: 0.45,
       vignette: 0.4,
+    },
+  },
+  {
+    id: 'kelp-forest',
+    name: '海藻摇曳',
+    desc: '螺旋上升，碧波荡漾',
+    swatch: 'radial-gradient(circle at 35% 25%,#065f46,#0d9488 58%,#042f2e)',
+    category: '创意',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 26,
+      height: 42,
+      dispersion: 0.25,
+      blur: 5,
+      saturation: 124,
+      cornerRadius: 26,
+      tint: '#134e4a',
+      tintOpacity: 0.26,
+      highlight: 0.8,
+      lightAngle: 160,
+      bubbles: 0.55,
+      bubbleSize: 0.9,
+      bubbleDensity: 1.4,
+      bubbleRise: 0.5,
+      bubbleDrift: 0.65,
+      glow: 'rgba(45,212,191,0.3)',
+      glowSpread: 26,
+      glowPulse: 0.35,
+      vignette: 0.35,
+    },
+  },
+  {
+    id: 'champagne-waltz',
+    name: '香槟圆舞',
+    desc: '金泡缓旋，微醺节拍',
+    swatch: 'radial-gradient(circle at 40% 30%,#fef3c7,#f59e0b 62%,#78350f)',
+    category: '创意',
+    config: {
+      ...DEFAULT_CONFIG,
+      refraction: 23,
+      height: 38,
+      dispersion: 0.18,
+      blur: 4,
+      saturation: 116,
+      cornerRadius: 24,
+      tint: '#78350f',
+      tintOpacity: 0.2,
+      highlight: 0.85,
+      highlightColor: '#fef3c7',
+      lightAngle: 120,
+      bubbles: 0.48,
+      bubbleSize: 0.75,
+      bubbleDensity: 1.7,
+      bubbleRise: 0.35,
+      bubbleDrift: 0.45,
+      glow: 'rgba(251,191,36,0.28)',
+      glowSpread: 24,
+      glowPulse: 0.25,
+      vignette: 0.28,
     },
   },
   {

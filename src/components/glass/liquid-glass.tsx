@@ -33,6 +33,8 @@ import { scaleColorAlpha, withAlpha } from '@/lib/glass/color'
 import { renderDisplacementMaps } from '@/lib/glass/displacement-map'
 import {
   brushedDataUri,
+  bubbleDriftAmpPx,
+  bubbleDriftPeriodSec,
   bubbleRisePeriodSec,
   bubblesDataUri,
 } from '@/lib/glass/textures'
@@ -264,6 +266,12 @@ function LiquidGlassImpl({
   const bubbleSize = Math.max(0.4, Math.min(2.2, config.bubbleSize ?? 1))
   const bubbleDensity = Math.max(0.3, Math.min(2.5, config.bubbleDensity ?? 1))
   const bubbleRise = Math.max(0, Math.min(1, config.bubbleRise ?? 0))
+  // Phase 13 M1: horizontal drift (0 = off) — sway amplitude via the
+  // registered --glass-drift-amp property consumed by the shared keyframes.
+  const bubbleDrift = Math.max(0, Math.min(1, config.bubbleDrift ?? 0))
+  // Phase 13 M2: global motion tempo — every animation period divides by
+  // it (1 = authored speed). Clamped 0.25..2 to match the API/slider.
+  const motionSpeed = Math.max(0.25, Math.min(2, config.motionSpeed ?? 1))
   // ---- Phase 9 M1: glow system ----
   // Multiplier semantics: final alpha = glow's own embedded alpha × glowOpacity.
   // Default 1 keeps every pre-Phase-9 preset visually identical.
@@ -305,8 +313,13 @@ function LiquidGlassImpl({
   // prefers-reduced-motion disables both through [data-glass-animated].
   const glowPulse = Math.max(0, Math.min(1, config.glowPulse ?? 0))
   const rimFlow = Math.max(0, Math.min(1, config.rimFlow ?? 0))
-  const glowPulsePeriod = (3.6 - 3.0 * glowPulse).toFixed(1)
-  const rimFlowPeriod = (6 - 4.5 * rimFlow).toFixed(1)
+  // Phase 13 M2: periods divide by motionSpeed (tempo ×2 = half periods).
+  const glowPulsePeriod = ((3.6 - 3.0 * glowPulse) / motionSpeed).toFixed(1)
+  const rimFlowPeriod = ((6 - 4.5 * rimFlow) / motionSpeed).toFixed(1)
+  const bubbleRisePeriod = Number(bubbleRisePeriodSec(bubbleRise)) / motionSpeed
+  const bubbleDriftPeriod =
+    Number(bubbleDriftPeriodSec(bubbleDrift, bubbleRise)) / motionSpeed
+  const driftAmp = bubbleDriftAmpPx(bubbleDrift)
   const glowAnimated = glowPulse > 0.01 && !!glowColor
   const rimAnimated = rimFlow > 0.01
   // Frosted grain: feTurbulence -> white grain w/ noise-derived alpha.
@@ -617,19 +630,35 @@ function LiquidGlassImpl({
       {/* Phase 9 M2: gas bubbles — radial-gradient spheres, seamless tile.
           Phase 10 M2: size/density scale the tile; bubbleRise loops the
           seamless 200px tile upward via a background-position animation
-          (reduced-motion disables it through [data-glass-animated]). */}
+          (reduced-motion disables it through [data-glass-animated]).
+          Phase 13 M1: bubbleDrift adds a sine-like horizontal sway — with
+          rise it traces a spiral, alone the tile sways in place. The two
+          animations compose on one element (rise owns background-position-y
+          through the shorthand, drift owns -x through the longhand). */}
       {bubbles > 0.01 && (
         <div
           aria-hidden
-          data-glass-animated={bubbleRise > 0.01 ? '' : undefined}
+          data-glass-animated={bubbleRise > 0.01 || bubbleDrift > 0.01 ? '' : undefined}
           className="pointer-events-none absolute inset-0"
           style={{
             ...radiusStyle(),
             backgroundImage: `url("${bubblesDataUri(bubbles * 0.55, bubbleSize, bubbleDensity)}")`,
             backgroundSize: '200px 200px',
+            ...(bubbleDrift > 0.01
+              ? ({ '--glass-drift-amp': `${driftAmp}px` } as React.CSSProperties)
+              : {}),
             animation:
-              bubbleRise > 0.01
-                ? `glass-bubble-rise ${bubbleRisePeriodSec(bubbleRise)}s linear infinite`
+              bubbleRise > 0.01 || bubbleDrift > 0.01
+                ? [
+                    bubbleRise > 0.01
+                      ? `glass-bubble-rise ${bubbleRisePeriod.toFixed(1)}s linear infinite`
+                      : '',
+                    bubbleDrift > 0.01
+                      ? `glass-bubble-drift ${bubbleDriftPeriod.toFixed(1)}s ease-in-out infinite alternate`
+                      : '',
+                  ]
+                    .filter(Boolean)
+                    .join(', ') || undefined
                 : undefined,
           }}
         />

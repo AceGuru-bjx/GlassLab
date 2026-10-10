@@ -21,6 +21,7 @@ import {
   GripHorizontal,
   GripVertical,
   Import,
+  Keyboard,
   LayoutGrid,
   Loader2,
   Lock,
@@ -68,6 +69,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import {
   Select,
   SelectContent,
@@ -194,6 +196,7 @@ type NumericKey = keyof Pick<
   | 'bubbleSize'
   | 'bubbleDensity'
   | 'bubbleRise'
+  | 'bubbleDrift'
   | 'shadowIntensity'
   | 'shadowDistance'
   | 'shadowSoftness'
@@ -204,6 +207,7 @@ type NumericKey = keyof Pick<
   | 'glowSpread'
   | 'glowPulse'
   | 'rimFlow'
+  | 'motionSpeed'
 >
 
 const PARAM_ROWS: {
@@ -236,6 +240,8 @@ const PARAM_ROWS: {
   { key: 'bubbleSize', label: '气泡大小', min: 0.4, max: 2.2, step: 0.05, fmt: v => `${v.toFixed(2)}×` },
   { key: 'bubbleDensity', label: '气泡密度', min: 0.3, max: 2.5, step: 0.05, fmt: v => `${Math.max(1, Math.round(8 * v))} 球` },
   { key: 'bubbleRise', label: '气泡上升', min: 0, max: 1, step: 0.01, fmt: v => (v <= 0.01 ? '关' : `${(8 - 6.5 * v).toFixed(1)}s`) },
+  // ---- Phase 13 M1: horizontal drift (with rise → spiral; alone → sway) ----
+  { key: 'bubbleDrift', label: '气泡漂移', min: 0, max: 1, step: 0.01, fmt: v => (v <= 0.01 ? '关' : `±${Math.round(v * 60)}px`) },
   // ---- Phase 11 M1: directional cast shadow (direction derives from
   //      lightAngle — rotate the light to swing the shadow around) ----
   { key: 'shadowIntensity', label: '投影强度', min: 0, max: 1, step: 0.05, fmt: v => (v <= 0.01 ? '关' : `${Math.round(v * 100)}%`) },
@@ -250,6 +256,8 @@ const PARAM_ROWS: {
   // ---- Phase 9 M3: motion system (fmt shows the actual period) ----
   { key: 'glowPulse', label: '辉光呼吸', min: 0, max: 1, step: 0.01, fmt: v => (v <= 0.01 ? '关' : `${(3.6 - 3.0 * v).toFixed(1)}s`) },
   { key: 'rimFlow', label: '高光流动', min: 0, max: 1, step: 0.01, fmt: v => (v <= 0.01 ? '关' : `${(6 - 4.5 * v).toFixed(1)}s`) },
+  // ---- Phase 13 M2: global motion tempo (divides every animation period) ----
+  { key: 'motionSpeed', label: '动效速度', min: 0.25, max: 2, step: 0.05, fmt: v => `${v.toFixed(2)}×` },
 ]
 
 /** Map a stage background option to the canvas cover generator spec. */
@@ -307,8 +315,10 @@ const RANDOM_RANGES: Record<NumericKey, [number, number]> = {
   glowPulse: [0, 0],
   rimFlow: [0, 0],
   bubbleRise: [0, 0],
-  // Phase 12: interaction feel params are opt-in too — never randomize.
+  // Phase 13: interaction feel & motion params are opt-in too.
   lightSmoothing: [0, 0],
+  bubbleDrift: [0, 0],
+  motionSpeed: [1, 1],
 }
 
 /** Phase 4 M3: variant jitter amplitude (±15% of the current value). */
@@ -983,34 +993,6 @@ export function GlassLab() {
     setHistoryDepth({ undo: h.past.length, redo: h.future.length })
   }, [restoreEntry])
 
-  // Keyboard shortcuts: Ctrl/Cmd+Z undo, Ctrl+Shift+Z / Ctrl+Y redo.
-  // Skipped while typing (native text editing owns those keys) and while
-  // compare mode is on — compare panes hold their own configs, not the stack.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (compareOn) return
-      const t = e.target as HTMLElement | null
-      if (
-        t &&
-        (t.tagName === 'INPUT' ||
-          t.tagName === 'TEXTAREA' ||
-          t.isContentEditable)
-      )
-        return
-      if (!(e.metaKey || e.ctrlKey)) return
-      const key = e.key.toLowerCase()
-      if (key === 'z') {
-        e.preventDefault()
-        if (e.shiftKey) redo()
-        else undo()
-      } else if (key === 'y') {
-        e.preventDefault()
-        redo()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [compareOn, undo, redo])
 
   // ---- Phase 4 M3: inspiration generator ----
   const [lockedParams, setLockedParams] = useState<Set<NumericKey>>(() => new Set())
@@ -1150,6 +1132,74 @@ export function GlassLab() {
     setActivePreset('')
     toast({ title: '已生成变体', description: '基于当前参数 ±15% 微调' })
   }, [lockedParams, pushHistory])
+
+  // ---- Phase 13 M3: keyboard shortcuts + help dialog ----
+  const [helpOpen, setHelpOpen] = useState(false)
+
+  // Keyboard shortcuts: Ctrl/Cmd+Z undo, Ctrl+Shift+Z / Ctrl+Y redo.
+  // Phase 13 M3 single-key layer: Z undo / Shift+Z redo / R random
+  // inspiration / V list↔gallery view / C compare / ? help. Skipped while
+  // typing (native text editing owns those keys), while a native modifier
+  // combination is held (browser shortcuts win), and undo/redo are also
+  // gated while compare mode is on — compare panes hold their own configs,
+  // not the stack. View/compare/help stay available everywhere.
+  const randomizeConfigRef = useRef(randomizeConfig)
+  randomizeConfigRef.current = randomizeConfig
+  const undoRef = useRef(undo)
+  undoRef.current = undo
+  const redoRef = useRef(redo)
+  redoRef.current = redo
+  const presetViewRef = useRef(presetView)
+  presetViewRef.current = presetView
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (
+        t &&
+        (t.tagName === 'INPUT' ||
+          t.tagName === 'TEXTAREA' ||
+          t.tagName === 'SELECT' ||
+          t.isContentEditable)
+      )
+        return
+      // Modifier combinations belong to the browser (Ctrl+T, Cmd+R…);
+      // the single-key layer only fires on bare keys.
+      if (e.metaKey || e.ctrlKey || e.altKey) {
+        const key = e.key.toLowerCase()
+        if (key === 'z' && !compareOn) {
+          e.preventDefault()
+          if (e.shiftKey) redoRef.current()
+          else undoRef.current()
+        } else if (key === 'y' && !compareOn) {
+          e.preventDefault()
+          redoRef.current()
+        }
+        return
+      }
+      const k = e.key
+      if (k === 'z' || k === 'Z') {
+        e.preventDefault()
+        if (e.shiftKey) redoRef.current()
+        else undoRef.current()
+      } else if (k === 'r' || k === 'R') {
+        e.preventDefault()
+        randomizeConfigRef.current()
+      } else if (k === 'v' || k === 'V') {
+        e.preventDefault()
+        setPresetView(v => (v === 'list' ? 'gallery' : 'list'))
+      } else if (k === 'c' || k === 'C') {
+        e.preventDefault()
+        setCompareOn(v => !v)
+      } else if (k === '?' || (k === '/' && e.shiftKey)) {
+        e.preventDefault()
+        setHelpOpen(v => !v)
+      } else if (k === 'Escape') {
+        setHelpOpen(false)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [compareOn])
 
   const patch = useCallback((p: Partial<GlassConfig>) => {
     setConfig(c => ({ ...c, ...p }))
@@ -1551,7 +1601,7 @@ export function GlassLab() {
           </div>
           <div className="flex items-center gap-2">
             <span className="hidden rounded-full border border-teal-500/30 bg-teal-500/10 px-2.5 py-1 text-[10px] font-medium text-teal-600 sm:inline-block">
-              Phase 12 · 触感与光效精修
+              Phase 13 · 动效编排系统
             </span>
             {sessionStatus === 'loading' ? (
               <div className="h-8 w-20 animate-pulse rounded-lg bg-muted" aria-hidden />
@@ -2046,7 +2096,7 @@ export function GlassLab() {
                     size="icon"
                     className="h-7 w-7"
                     aria-label="撤销"
-                    title="撤销 (Ctrl+Z)"
+                    title="撤销 (Z)"
                     data-testid="undo-btn"
                     disabled={historyDepth.undo === 0 || compareOn}
                     onClick={undo}
@@ -2058,7 +2108,7 @@ export function GlassLab() {
                     size="icon"
                     className="h-7 w-7"
                     aria-label="重做"
-                    title="重做 (Ctrl+Shift+Z)"
+                    title="重做 (Shift+Z)"
                     data-testid="redo-btn"
                     disabled={historyDepth.redo === 0 || compareOn}
                     onClick={redo}
@@ -2093,13 +2143,25 @@ export function GlassLab() {
                     size="sm"
                     className="h-7 gap-1 px-2 text-xs"
                     aria-label="随机灵感"
-                    title="随机灵感：在审美区间内随机全部参数（锁定项不变）"
+                    title="随机灵感 (R)：在审美区间内随机全部参数（锁定项不变）"
                     data-testid="randomize-btn"
                     disabled={compareOn}
                     onClick={randomizeConfig}
                   >
                     <Dices className="h-3.5 w-3.5" />
                     随机灵感
+                  </Button>
+                  {/* Phase 13 M3: shortcut help */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    aria-label="键盘快捷键 (?)"
+                    title="键盘快捷键 (?)"
+                    data-testid="help-btn"
+                    onClick={() => setHelpOpen(true)}
+                  >
+                    <Keyboard className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               </div>
@@ -2372,6 +2434,54 @@ export function GlassLab() {
 
       <AuthDialog open={authOpen} onOpenChange={setAuthOpen} />
 
+      {/* ---------- Phase 13 M3: shortcut help dialog ---------- */}
+      <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-1.5 text-sm">
+              <Keyboard className="h-4 w-4" aria-hidden />
+              键盘快捷键
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              输入框/色板聚焦时自动让位；带修饰键的组合仍归浏览器（Ctrl+Z 等照常可用）。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-1.5">
+            {(
+              [
+                { keys: ['Z'], desc: '撤销上一步参数' },
+                { keys: ['Shift', 'Z'], desc: '重做' },
+                { keys: ['R'], desc: '随机灵感（锁定项不变）' },
+                { keys: ['V'], desc: '列表 ↔ 画廊视图切换' },
+                { keys: ['C'], desc: '对比模式开关' },
+                { keys: ['?'], desc: '打开/关闭本帮助' },
+                { keys: ['Esc'], desc: '关闭弹层/帮助' },
+              ] as { keys: string[]; desc: string }[]
+            ).map(row => (
+              <div
+                key={row.desc}
+                className="flex items-center justify-between gap-3 rounded-lg border-border/60 px-2.5 py-1.5"
+              >
+                <span className="text-xs text-muted-foreground">{row.desc}</span>
+                <span className="flex items-center gap-1">
+                  {row.keys.map(k => (
+                    <kbd
+                      key={k}
+                      className="rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] font-semibold text-foreground shadow-[inset_0_-1px_0_0_rgba(0,0,0,0.08)]"
+                    >
+                      {k}
+                    </kbd>
+                  ))}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] leading-relaxed text-muted-foreground">
+            触屏无键盘？所有功能均有对应的屏幕控件——快捷键只是效率增强，不是唯一路径。
+          </p>
+        </DialogContent>
+      </Dialog>
+
       {/* ---------- Sticky footer ---------- */}
       <footer className="mt-auto border-t border-white/10 bg-background/70 py-4 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-1.5 px-4 text-[11px] text-muted-foreground sm:flex-row">
@@ -2387,7 +2497,7 @@ export function GlassLab() {
             </a>{' '}
             (Apache-2.0)
           </span>
-          <span>第十二阶段 · 触感与光效精修 / 光源惯性 · 投影染色 · 预览放大 · 样式库 {PRESETS.length} 款</span>
+          <span>第十三阶段 · 动效编排系统 / 气泡漂移 · 动效速度 · 快捷键 · 样式库 {PRESETS.length} 款</span>
         </div>
       </footer>
     </div>
